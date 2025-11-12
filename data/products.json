@@ -1,0 +1,208 @@
+[
+  {
+    "id": "prod-super-fun-dev-tshirt",
+    "name": "Toggle Float",
+    "category": "Apparel",
+    "price": 25,
+    "description": "25 in stock. Available in 5 sizes.",
+    "stock": 25,
+    "featured": true,
+    "images": {
+      "main": "/assets/products/Item-Details-Float.png",
+      "thumbnail": "/assets/products/Item-Details-Float.png"
+    },
+    "sizes": ["S", "M", "L", "XL", "XXL"],
+    "details": {
+      "material": "100% Cotton",
+      "fit": "Regular"
+    },
+    "tags": ["featured", "apparel"]
+  },
+  {
+    "id": "prod-socks",
+    "name": "Feature Flag Socks",
+    "category": "Apparel",
+    "price": 12,
+    "description": "Comfortable crew socks with fun feature flag designs.",
+    "stock": 60,
+    "featured": true,
+    "images": {
+      "main": "/assets/products/Item-Details-Socks.png",
+      "thumbnail": "/assets/products/Item-Details-Socks.png"
+    },
+    "sizes": ["S/M", "L/XL", "XXL"],
+    "details": {
+      "material": "Cotton blend",
+      "length": "Crew"
+    },
+    "tags": ["apparel"]
+  },
+  {
+    "id": "prod-shoes",
+    "name": "Developer Shoes",
+    "category": "Apparel",
+    "price": 65,
+    "description": "Comfortable kicks for shipping features fast.",
+    "stock": 20,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-Shoes.png",
+      "thumbnail": "/assets/products/Item-Details-Shoes.png"
+    },
+    "sizes": ["M", "L", "XL"],
+    "details": {
+      "material": "Synthetic",
+      "fit": "Regular"
+    },
+    "tags": ["apparel"]
+  },
+  {
+    "id": "prod-skateboard",
+    "name": "Toggle Skateboard",
+    "category": "Accessories",
+    "price": 90,
+    "description": "Cruise into deployments with style.",
+    "stock": 10,
+    "featured": true,
+    "images": {
+      "main": "/assets/products/Item-Details-Skateboard.png",
+      "thumbnail": "/assets/products/Item-Details-Skateboard.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories", "featured"]
+  },
+  {
+    "id": "prod-rocket",
+    "name": "Launch Rocket",
+    "category": "Accessories",
+    "price": 45,
+    "description": "Blast off your experiments.",
+    "stock": 18,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-Rocket.png",
+      "thumbnail": "/assets/products/Item-Details-Rocket.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-mugs",
+    "name": "Code & Coffee Mug",
+    "category": "Drinkware",
+    "price": 15,
+    "description": "Perfect for daily standups and caffeine.",
+    "stock": 50,
+    "featured": true,
+    "images": {
+      "main": "/assets/products/Item-Details-Mugs.png",
+      "thumbnail": "/assets/products/Item-Details-Mugs.png"
+    },
+    "sizes": [],
+    "details": {
+      "material": "Ceramic"
+    },
+    "tags": ["drinkware","featured"]
+  },
+  {
+    "id": "prod-mask",
+    "name": "Toggle Mask",
+    "category": "Accessories",
+    "price": 10,
+    "description": "Stay incognito while toggling.",
+    "stock": 40,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-Mask.png",
+      "thumbnail": "/assets/products/Item-Details-Mask.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-ldwatch",
+    "name": "LD Watch",
+    "category": "Accessories",
+    "price": 99,
+    "description": "Always on time for rollouts.",
+    "stock": 12,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-Watch.png",
+      "thumbnail": "/assets/products/Item-Details-Watch.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-float",
+    "name": "Feature Float",
+    "category": "Accessories",
+    "price": 22,
+    "description": "Float your flags in style.",
+    "stock": 30,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-Float2.png",
+      "thumbnail": "/assets/products/Item-Details-Float2.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-buckethat",
+    "name": "Bucket Hat",
+    "category": "Accessories",
+    "price": 20,
+    "description": "Shade for your next demo.",
+    "stock": 35,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-BucketHat.png",
+      "thumbnail": "/assets/products/Item-Details-BucketHat.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-vr",
+    "name": "LDVR Headset",
+    "category": "Accessories",
+    "price": 199,
+    "description": "Immerse in feature worlds.",
+    "stock": 8,
+    "featured": false,
+    "images": {
+      "main": "/assets/products/Item-Details-VR.png",
+      "thumbnail": "/assets/products/Item-Details-VR.png"
+    },
+    "sizes": [],
+    "details": {},
+    "tags": ["accessories"]
+  },
+  {
+    "id": "prod-sticker",
+    "name": "LaunchDarkly Sticker",
+    "category": "Accessories",
+    "price": 3,
+    "description": "Premium vinyl sticker.",
+    "stock": 200,
+    "featured": true,
+    "images": {
+      "main": "/assets/products/Item-Details-Sticker.png",
+      "thumbnail": "/assets/products/Item-Details-Sticker.png"
+    },
+    "sizes": [],
+    "details": {
+      "material": "Vinyl"
+    },
+    "tags": ["accessories", "featured"]
+  }
+]
+

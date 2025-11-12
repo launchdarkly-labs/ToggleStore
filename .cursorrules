@@ -1,0 +1,315 @@
+# ToggleStore - LaunchDarkly Demo Application
+
+## Project Overview
+This is a Next.js e-commerce application built to demonstrate LaunchDarkly's feature flag capabilities at conferences and events. The app serves as an interactive storefront where presenters can showcase LaunchDarkly features in a real-world shopping context.
+
+## Tech Stack
+- **Framework**: Next.js 15 with App Router
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4
+- **UI Components**: shadcn/ui
+- **Authentication**: NextAuth.js v5 with Google OAuth (LaunchDarkly domain restricted)
+- **Feature Flags**: LaunchDarkly SDK (client-side and server-side)
+
+## Application Structure
+1. **Storefront** (`/`) - Main page with product carousel, grid, filters, and search
+2. **Product Details** - Modal/overlay showing detailed product information
+3. **Shopping Cart** - Right-side drawer showing cart items and checkout
+4. **Chatbot** - AI assistant feature (toggle icon in bottom right)
+5. **Admin Routes** - Protected routes for authenticated LaunchDarkly users only
+
+## Architecture Patterns
+
+### Authentication
+- NextAuth.js v5 configured for Google OAuth
+- **Domain Restriction**: Only `@launchdarkly.com` emails can authenticate
+- Authentication is **optional** for public storefront access
+- Authentication is **required** for admin/protected routes
+- Session data available via `auth()` server function
+- Sign in page: `/auth/signin`
+
+### LaunchDarkly Integration
+- **Server-side**: Use `getLDServerClient()` and `getFlagValue()` from `@/lib/launchdarkly/server`
+- **Client-side**: Wrap components with `LaunchDarklyProvider` and use `useFlag()` hook
+- User context automatically passed from NextAuth session to LaunchDarkly
+- Environment variables required:
+  - `LAUNCHDARKLY_SDK_KEY` (server-side)
+  - `NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID` (client-side)
+
+### Data Management
+- Product data stored in `/data/products.json`
+- JSON structure includes: id, name, category, price, description, stock, images, sizes, etc.
+- Images referenced by path in `/public/assets/products/`
+
+### Component Structure
+- Use shadcn/ui components from `@/components/ui/*`
+- Custom components in `/components/*`
+- Follow the dark theme design system from Figma
+- Maintain consistent spacing, colors, and typography
+
+### Routing
+- App Router with server components by default
+- Use `"use client"` directive only when needed (state, hooks, interactivity)
+- Pass data via props or server actions
+
+## Design System
+
+### Colors
+- **Background**: `#191919` (dark gray/black)
+- **Primary Blue**: `#7084FF` (LaunchDarkly blue)
+- **Accent Blue**: `#405BFF` (darker blue for borders)
+- **Text Primary**: `#FFFFFF` (white)
+- **Text Secondary**: `#A7A9AC` (gray)
+- **Text Tertiary**: `#58595B` (darker gray)
+- **Borders**: `#58595B`, `#414042`
+- **Card Background**: Gradient from transparent to black
+
+### Typography
+- **Font Family**: Sohne (primary), Sohne Mono (prices)
+- **Headings**: Sohne Kräftig (bold variant)
+- **Body**: Sohne Buch (regular variant)
+- **Sizes**: H1: 200px, H2: 40px, H3: 32px, Body: 16-20px, Small: 12px
+
+### Spacing
+- Container: 182px horizontal padding
+- Card gaps: 24-44px
+- Internal padding: 32-38px
+- Border radius: 5px (buttons), 30px (cards), 60px (pills)
+
+## Code Style Guidelines
+
+### TypeScript
+- Always use TypeScript with proper typing
+- Avoid `any` types unless absolutely necessary
+- Define interfaces for component props and data structures
+- Create types in `/types/*` if shared across multiple files
+
+### React Components
+- Prefer server components unless client interactivity is required
+- Use async/await for server components with data fetching
+- Keep components small and focused on a single responsibility
+- Extract reusable logic into custom hooks
+
+### Styling
+- Use Tailwind CSS utility classes
+- Follow the dark theme color scheme from Figma
+- Use shadcn/ui components for consistent UI
+- Maintain responsive design (mobile-first approach)
+- Use gradient backgrounds for visual depth
+
+### File Organization
+- Components: `/components/ui/*` (shadcn) and `/components/*` (custom)
+- Pages: `/app/**/page.tsx`
+- API Routes: `/app/api/**/route.ts`
+- Utilities: `/lib/*`
+- Types: `/types/*`
+- Data: `/data/*`
+- Assets: `/public/assets/**/*`
+
+## Figma MCP Integration Rules
+
+### Required Flow (do not skip)
+1. **Run `get_design_context` first** to fetch the structured representation for the exact node(s).
+2. **If the response is too large or truncated**, run `get_metadata` to get the high-level node map and then re-fetch only the required node(s) with `get_design_context`.
+3. **Run `get_screenshot`** for a visual reference of the node variant being implemented.
+4. **Only after you have both `get_design_context` and `get_screenshot`**, download any assets needed and start implementation.
+5. **Translate the output** (usually React + Tailwind) into this project's conventions, styles and framework. Reuse the project's color tokens, components, and typography wherever possible.
+6. **Validate against Figma** for 1:1 look and behavior before marking complete.
+
+### Implementation Rules
+- **Treat the Figma MCP output** (React + Tailwind) as a representation of design and behavior, **not as final code style**.
+- **Reuse existing components** (e.g., buttons, inputs, cards, badges) instead of duplicating functionality.
+  - Always check `/components/ui/*` for shadcn components before creating new ones
+  - Use existing Button, Card, Input, Badge, Sheet, Dialog, Avatar components
+- **Use the project's color system, typography scale, and spacing tokens consistently**.
+  - Background: `bg-[#191919]`
+  - Primary blue: `#7084FF`, `#405BFF`
+  - Text colors: `text-white`, `text-[#A7A9AC]`, `text-[#58595B]`
+  - Maintain gradient backgrounds where present in design
+- **Respect existing routing, state management, and data-fetch patterns** already adopted in the repo.
+  - Use Next.js App Router conventions
+  - Use server components by default
+  - Use "use client" only when necessary
+- **Strive for 1:1 visual parity** with the Figma design.
+- **Validate the final UI** against the Figma screenshot for both look and behavior.
+
+### Asset Handling
+- Download images/icons to `/public/assets/` in appropriate subfolders:
+  - `/public/assets/products/` - Product images
+  - `/public/assets/icons/` - UI icons
+  - `/public/assets/chatbot/` - Chatbot related assets
+  - `/public/assets/backgrounds/` - Background effects/glows
+- Use Next.js Image component for images
+- Optimize assets before committing
+- Use SVG for icons when possible
+
+### Workflow for Figma Designs
+1. Receive Figma link from user
+2. Extract `fileKey` and `nodeId` from URL
+3. Call `get_design_context` with extracted values
+4. Call `get_screenshot` for visual reference
+5. Download any referenced assets to appropriate folders
+6. Implement using existing components and patterns
+7. Ensure responsive design (mobile, tablet, desktop)
+8. Validate against screenshot
+
+## Environment Variables
+Required environment variables (stored in `.env.local`):
+```
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<your-secret-key>
+GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
+GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
+
+# LaunchDarkly
+LAUNCHDARKLY_SDK_KEY=<your-server-sdk-key>
+NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=<your-client-id>
+```
+
+## Development Workflow
+1. Run `npm install` to install dependencies
+2. Copy `.env.example` to `.env.local` and fill in values
+3. Run `npm run dev` to start development server
+4. Access app at `http://localhost:3000`
+5. Test authentication flow (optional for public access)
+6. Verify LaunchDarkly connection (flags should load)
+
+## Best Practices
+- **Always test responsive design** on mobile, tablet, and desktop
+- **Use semantic HTML** for accessibility
+- **Keep performance in mind** - minimize client-side JavaScript
+- **Follow Next.js best practices** for App Router
+- **Write meaningful commit messages**
+- **Test feature flags** in both enabled/disabled states
+- **Validate against Figma designs** for visual consistency
+
+## Common Patterns
+
+### Creating a New Page
+```typescript
+// Server component by default
+export default async function MyPage() {
+  const session = await auth()
+  // Fetch data, check permissions, etc.
+  return <div>...</div>
+}
+
+// Client component when needed
+"use client"
+export default function MyPage() {
+  const [state, setState] = useState()
+  // Use hooks, event handlers, etc.
+  return <div>...</div>
+}
+```
+
+### Protected Route (Admin Only)
+```typescript
+import { auth } from "@/lib/auth"
+import { redirect } from "next/navigation"
+
+export default async function AdminPage() {
+  const session = await auth()
+  
+  // Check if user is authenticated and from LaunchDarkly domain
+  if (!session || !session.user?.email?.endsWith("@launchdarkly.com")) {
+    redirect("/auth/signin")
+  }
+  
+  return <div>Admin content</div>
+}
+```
+
+### Using Feature Flags (Client)
+```typescript
+"use client"
+import { useFlag } from "@/lib/launchdarkly/client"
+
+export default function MyComponent() {
+  const showNewFeature = useFlag("new-feature", false)
+  
+  return showNewFeature ? <NewFeature /> : <OldFeature />
+}
+```
+
+### Using Feature Flags (Server)
+```typescript
+import { getFlagValue } from "@/lib/launchdarkly/server"
+
+export default async function MyPage() {
+  const showNewFeature = await getFlagValue(
+    "new-feature",
+    { kind: "user", key: "anonymous" },
+    false
+  )
+  
+  return showNewFeature ? <NewFeature /> : <OldFeature />
+}
+```
+
+### Loading Product Data
+```typescript
+import products from "@/data/products.json"
+
+export default function ProductList() {
+  return (
+    <div>
+      {products.map(product => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+    </div>
+  )
+}
+```
+
+### Using shadcn/ui Components
+```typescript
+import { Button } from "@/components/ui/button"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+
+// Use variants and sizes
+<Button variant="outline" size="lg">Click Me</Button>
+<Badge variant="secondary">New</Badge>
+```
+
+## Purpose & Context
+This app is designed for **conference demonstrations and events**. The presenter (demoer) will:
+- Walk through the storefront in front of an audience
+- Demonstrate LaunchDarkly's feature flag capabilities in a real e-commerce context
+- Show real-time feature toggles (new products, pricing, cart features, chatbot, etc.)
+- Highlight targeting, experimentation, and rollout strategies
+- Showcase gradual rollouts and instant rollbacks
+
+The UI should be:
+- **Professional and polished** for large screens/projectors
+- **Intuitive** - minimal explanation needed
+- **Engaging** - visually appealing with smooth transitions
+- **Fast** - no loading delays during presentation
+- **Reliable** - graceful degradation if services are unavailable
+
+## Demo Features to Implement (Future)
+Ideas for LaunchDarkly flag demonstrations:
+- **Product Recommendations**: Personalized product suggestions
+- **Pricing Experiments**: A/B test different prices
+- **New Product Launches**: Gradually roll out new products
+- **Cart Features**: Toggle express checkout, gift wrapping, promo codes
+- **Chatbot**: Enable/disable AI assistant
+- **Search Enhancements**: Toggle advanced search features
+- **Inventory Management**: Show/hide out-of-stock items
+- **Seasonal Themes**: Switch between themes/layouts
+- **User Targeting**: Different experiences based on user attributes
+- **Kill Switches**: Instantly disable problematic features
+
+## Notes for AI Assistant
+- **Reuse existing components** - don't recreate what's already built
+- **Maintain visual consistency** with Figma designs and dark theme
+- **Ask for clarification** if Figma design conflicts with existing patterns
+- **Test responsiveness** - conference screens vary in size
+- **Prioritize performance** - fast page loads are critical for demos
+- **Keep feature flag integration in mind** - design components to be easily togglable
+- **Document new components** - add comments for complex logic
+- **Follow the established patterns** - consistency is key
+

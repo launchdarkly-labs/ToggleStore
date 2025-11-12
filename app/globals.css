@@ -1,26 +1,311 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sohne);
+  --font-mono: var(--font-sohne-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Category button selected state with hover */
+.category-button-selected {
+  background: linear-gradient(179deg, #405BFF 1.06%, #7084FF 123.42%);
+  transition: background 0.3s ease;
+}
+
+.category-button-selected:hover {
+  background: linear-gradient(179deg, #364DD9 1.06%, #405BFF 123.42%);
+}
+
+/* Infinite scroll animation for featured products */
+@keyframes scroll-infinite {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.featured-carousel-infinite {
+  animation: scroll-infinite 90s linear infinite;
+  will-change: transform;
+}
+
+.featured-carousel-infinite:hover {
+  animation-play-state: paused;
+}
+
+.featured-carousel-infinite.dragging {
+  animation-play-state: paused !important;
+  cursor: grabbing !important;
+}
+
+/* Flowing gradient animation for banner */
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.banner-gradient-flow {
+  background: linear-gradient(
+    90deg,
+    #405BFF -39.32%,
+    #6B4FC8 20%,
+    #A34FDE 50%,
+    #6B4FC8 80%,
+    #405BFF 145.66%
+  );
+  background-size: 200% 100%;
+  animation: gradient-flow 10s ease-in-out infinite;
+  will-change: background-position;
+}
+
+.banner-gradient-flow-shipping {
+  background: linear-gradient(
+    179deg,
+    #364DD9 1.06%,
+    #3A50E0 30%,
+    #405BFF 50%,
+    #3A50E0 70%,
+    #364DD9 123.42%
+  );
+  background-size: 200% 100%;
+  animation: gradient-flow 10s ease-in-out infinite;
+  will-change: background-position;
+}
+
+/* Chatbot button flowing gradient animation */
+.chatbot-button-gradient-flow {
+  background: linear-gradient(
+    225deg,
+    #EBFF38 -7.08%,
+    #3DD6F5 30%,
+    #EBFF38 50%,
+    #3DD6F5 70%,
+    #EBFF38 90.68%
+  );
+  background-size: 200% 200%;
+  animation: gradient-flow 10s ease-in-out infinite;
+  will-change: background-position;
+}
+
+/* Promo code banner right-to-left scrolling animation */
+@keyframes scroll-promo {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.banner-promo-scroll {
+  overflow: hidden;
+}
+
+.banner-promo-content {
+  display: inline-flex;
+  gap: 60px;
+  animation: scroll-promo 40s linear infinite;
+  will-change: transform;
+}
+
+/* Toast gradient animations */
+.toast-gradient-error {
+  background: linear-gradient(
+    223deg,
+    #FF386B -1.29%,
+    #D6347E 30%,
+    #A34FDE 50%,
+    #D6347E 70%,
+    #FF386B 110.16%
+  );
+  background-size: 200% 200%;
+  animation: toast-gradient-flow 8s ease-in-out infinite;
+  will-change: background-position;
+}
+
+.toast-gradient-success {
+  background: linear-gradient(
+    223deg,
+    #10B981 -1.29%,
+    #059669 18%,
+    #10B981 38%,
+    #059669 58%,
+    #10B981 78%,
+    #FFFFFF 98%,
+    #10B981 110.16%
+  );
+  background-size: 200% 200%;
+  animation: toast-gradient-flow 8s ease-in-out infinite;
+  will-change: background-position;
+}
+
+@keyframes toast-gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Toast slide-in animation */
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) translateX(-50%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(-50%);
+  }
+}
+
+.toast-enter {
+  animation: toast-slide-in 0.3s ease-out;
+}
+
+/* Developer tool button gradient flow animation */
+.developer-tool-button-gradient-flow {
+  background: linear-gradient(179deg, #405BFF 1.06%, #7084FF 123.42%);
+  background-size: 200% 100%;
+  animation: gradient-flow 10s ease-in-out infinite;
+  will-change: background-position;
+  transition: background 0.3s ease;
+}
+
+.developer-tool-button-gradient-flow:hover {
+  background: linear-gradient(179deg, #364DD9 1.06%, #405BFF 123.42%);
+  animation: none;
+}
+
+/* Hide scrollbar for webkit browsers */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
