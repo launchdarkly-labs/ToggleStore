@@ -43,23 +43,23 @@ class ToggleStoreBuilder:
         self.project_settings()
         self.setup_release_pipeline()
         
-        # Prepare environment variables for the subprocess
-        env = os.environ.copy()
-        env["LD_PROJECT_KEY"] = self.project_key
-        env["LD_API_KEY"] = self.api_key
-        env["LD_SDK_KEY"] = self.sdk_key
-        env["LD_CLIENT_KEY"] = self.client_id
-        # Add any other required variables here
+        # # Prepare environment variables for the subprocess
+        # env = os.environ.copy()
+        # env["LD_PROJECT_KEY"] = self.project_key
+        # env["LD_API_KEY"] = self.api_key
+        # env["LD_SDK_KEY"] = self.sdk_key
+        # env["LD_CLIENT_KEY"] = self.client_id
+        # # Add any other required variables here
         
-        # Run LDResultsGenerator.py after project setup is complete
-        print("Starting results generator...")
-        proc = subprocess.Popen([
-            "python3", os.path.join(os.path.dirname(__file__), "LDResultsGenerator.py")
-        ], env=env)
+        # # Run LDResultsGenerator.py after project setup is complete
+        # print("Starting results generator...")
+        # proc = subprocess.Popen([
+        #     "python3", os.path.join(os.path.dirname(__file__), "LDResultsGenerator.py")
+        # ], env=env)
         
-        print("Waiting for results generator to complete...")
-        proc.wait()
-        print("Results generator completed.")
+        # print("Waiting for results generator to complete...")
+        # proc.wait()
+        # print("Results generator completed.")
         
 ############################################################################################################
    

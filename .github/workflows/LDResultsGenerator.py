@@ -126,6 +126,7 @@ def evaluate_all_flags(client):
     
     logging.info("Flag evaluation completed. Flushing client...")
     client.flush()
+    time.sleep(0.5)  # Wait for flush to complete
     logging.info("Flag evaluation finished.")
 
 def payments_systems_upgrade_generator(client, stop_event):
@@ -350,9 +351,14 @@ def search_algorithm_experiment_generator(client):
                 client.track(CART_TOTAL_KEY, user_context, None, avg_cart_total)
                 logging.debug(f"User {user_context.key} added to cart with {variation} variation")
             
-            if (i + 1) % 100 == 0:
+            # Flush more frequently to prevent event buffer overflow
+            if (i + 1) % 50 == 0:
                 logging.info(f"Processed {i + 1} users for Search Algorithm experiment")
                 client.flush()
+                time.sleep(0.1)  # Small delay after flush to allow connections to close
+            
+            # Small delay to prevent SDK overload
+            time.sleep(0.005)  # 5ms delay = ~200 events/sec
                 
         except Exception as e:
             logging.error(f"Error processing user {i}: {str(e)}")
@@ -360,6 +366,7 @@ def search_algorithm_experiment_generator(client):
     
     logging.info("Search Algorithm experiment results generation completed")
     client.flush()
+    time.sleep(0.5)  # Wait for final flush to complete
 
 def store_promo_banner_experiment_generator(client):
     """Experiment results generator for store promo banner - NEUTRAL (no clear winner)"""
@@ -423,9 +430,14 @@ def store_promo_banner_experiment_generator(client):
                         if random.random() < checkout_rate:
                             client.track("checkout-complete", user_context)
             
-            if (i + 1) % 100 == 0:
+            # Flush more frequently to prevent event buffer overflow
+            if (i + 1) % 50 == 0:
                 logging.info(f"Processed {i + 1} users for Store Promo Banner experiment")
                 client.flush()
+                time.sleep(0.1)  # Small delay after flush to allow connections to close
+            
+            # Small delay to prevent SDK overload
+            time.sleep(0.005)  # 5ms delay = ~200 events/sec
                 
         except Exception as e:
             logging.error(f"Error processing user {i}: {str(e)}")
@@ -433,6 +445,7 @@ def store_promo_banner_experiment_generator(client):
     
     logging.info("Store Promo Banner experiment results generation completed")
     client.flush()
+    time.sleep(0.5)  # Wait for final flush to complete
 
 def ai_config_experiment_generator(client):
     """Experiment results generator for AI Config - NEUTRAL (no clear winner)"""
@@ -493,9 +506,14 @@ def ai_config_experiment_generator(client):
             if random.random() < negative_feedback_rate:
                 client.track(AI_CHATBOT_NEGATIVE_FEEDBACK_KEY, user_context)
             
-            if (i + 1) % 100 == 0:
+            # Flush more frequently to prevent event buffer overflow
+            if (i + 1) % 50 == 0:
                 logging.info(f"Processed {i + 1} users for AI Config experiment")
                 client.flush()
+                time.sleep(0.1)  # Small delay after flush to allow connections to close
+            
+            # Small delay to prevent SDK overload
+            time.sleep(0.005)  # 5ms delay = ~200 events/sec
                 
         except Exception as e:
             logging.error(f"Error processing user {i}: {str(e)}")
@@ -503,6 +521,7 @@ def ai_config_experiment_generator(client):
     
     logging.info("AI Config experiment results generation completed")
     client.flush()
+    time.sleep(0.5)  # Wait for final flush to complete
 
 def generate_results(project_key, api_key):
     """Main function to generate all results"""
@@ -516,7 +535,8 @@ def generate_results(project_key, api_key):
     # Configure SDK with larger event buffer to reduce connection pool pressure
     config = Config(
         sdk_key=sdk_key,
-        events_max_pending=5000  # Increase pending events buffer to batch more events
+        events_max_pending=5000,  # Increase pending events buffer to batch more events
+        flush_interval=5.0  # Flush events every 5 seconds automatically
     )
     ldclient.set_config(config)
     client = ldclient.get()
@@ -532,9 +552,20 @@ def generate_results(project_key, api_key):
         logging.info("=" * 60)
         evaluate_all_flags(client)
         
-        # 2. Generate guarded rollout results
+        # 2. Generate experiment results (run before guarded rollouts for faster completion)
         logging.info("=" * 60)
-        logging.info("STEP 2: Generating guarded rollout results")
+        logging.info("STEP 2: Generating experiment results")
+        logging.info("=" * 60)
+        
+        search_algorithm_experiment_generator(client)
+        store_promo_banner_experiment_generator(client)
+        ai_config_experiment_generator(client)
+        
+        logging.info("Experiment results generation completed.")
+        
+        # 3. Generate guarded rollout results
+        logging.info("=" * 60)
+        logging.info("STEP 3: Generating guarded rollout results")
         logging.info("=" * 60)
         
         payments_stop_event = threading.Event()
@@ -561,21 +592,18 @@ def generate_results(project_key, api_key):
         
         logging.info("All guarded rollout generators have completed.")
         
-        # 3. Generate experiment results
-        logging.info("=" * 60)
-        logging.info("STEP 3: Generating experiment results")
-        logging.info("=" * 60)
-        
-        search_algorithm_experiment_generator(client)
-        store_promo_banner_experiment_generator(client)
-        ai_config_experiment_generator(client)
-        
         logging.info("=" * 60)
         logging.info("All results generation completed successfully!")
         logging.info("=" * 60)
         
     finally:
+        # Ensure all events are flushed before closing
+        logging.info("Performing final flush to ensure all events are sent...")
         client.flush()
+        time.sleep(2)  # Wait for flush to complete
+        client.flush()  # Double flush to ensure all events are sent
+        time.sleep(1)  # Final wait
+        logging.info("Final flush completed. Closing client...")
         client.close()
 
 if __name__ == "__main__":

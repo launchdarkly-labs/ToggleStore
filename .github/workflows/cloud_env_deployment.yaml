@@ -12,9 +12,7 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: us-east-1
-  KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
   ECR_REPOSITORY: togglestore
-  KUBECTL_VERSION: "v1.23.0"
   DEMO_NAMESPACE: ${{ github.event.inputs.name }}
   LD_PROJECT_KEY: ${{ github.event.inputs.name }}-togglestore
   LD_API_KEY: ${{ secrets.LD_API_KEY }}
@@ -76,72 +74,44 @@ jobs:
           URL: ${{ env.DEMO_NAMESPACE }}.launchdarklydemos.com
           IMAGE: ${{ steps.login-ecr.outputs.registry }}/togglestore:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
 
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: ${{ env.KUBECTL_VERSION }}
-
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ env.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Check Namespace in Kubernetes
-        run: |
-          kubectl get namespace ${{ env.DEMO_NAMESPACE }} &>/dev/null && echo "namespace_exists=true" >> $GITHUB_ENV || echo "namespace_exists=false" >> $GITHUB_ENV
+        uses: kodermax/kubectl-aws-eks@master
+        with:
+          args: get namespace ${{ env.DEMO_NAMESPACE }} &>/dev/null && echo "namespace_exists=true" >> $GITHUB_ENV || echo "namespace_exists=false" >> $GITHUB_ENV
 
       - name: Create Namespace In Kubernetes
         if: env.namespace_exists == 'false'
-        run: |
-          kubectl create namespace ${{ env.DEMO_NAMESPACE }}
+        uses: kodermax/kubectl-aws-eks@master
+        with:
+          args: create namespace ${{ env.DEMO_NAMESPACE }}
 
       - name: Applying deploy file to Kubernetes
-        run: |
-          kubectl apply -f ./.github/workflows/deploy_files/deploy.yaml -n ${{ env.DEMO_NAMESPACE }}
+        uses: kodermax/kubectl-aws-eks@master
+        with:
+          args: apply -f ./.github/workflows/deploy_files/deploy.yaml -n ${{ env.DEMO_NAMESPACE }}
 
-      - name: Create or Update ConfigMap for Environment Variables
-        run: |
-          kubectl create configmap togglestore-env \
-            --from-literal=NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=${{ env.LD_CLIENT_KEY }} \
-            --from-literal=LAUNCHDARKLY_SDK_KEY=${{ env.LD_SDK_KEY }} \
-            --from-literal=LD_PROJECT_KEY=${{ env.LD_PROJECT_KEY }} \
-            --from-literal=OPENAI_API_KEY=${{ env.OPENAI_API_KEY }} \
-            --from-literal=NEXTAUTH_URL=https://${{ env.DEMO_NAMESPACE }}.launchdarklydemos.com \
-            --from-literal=NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }} \
-            -n ${{ env.DEMO_NAMESPACE }} \
-            --dry-run=client -o yaml | kubectl apply -f -
-        env:
-          LD_CLIENT_KEY: ${{ env.LD_CLIENT_KEY }}
-          LD_SDK_KEY: ${{ env.LD_SDK_KEY }}
-
-      - name: Update Deployment with Environment Variables from ConfigMap
-        run: |
-          kubectl set env deployment/togglestore-deployment \
-            -n ${{ env.DEMO_NAMESPACE }} \
-            --from=configmap/togglestore-env \
-            --all
-
-      - name: Restart Deployment to Pick Up Environment Variables
-        run: |
-          kubectl rollout restart deployment/togglestore-deployment -n ${{ env.DEMO_NAMESPACE }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
       - name: Get NGINX Ingress Controller Load Balancer Hostname
         id: get-nginx-lb
-        run: |
-          HOSTNAME=$(kubectl get service -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "NGINX_LB_HOSTNAME=$HOSTNAME" >> $GITHUB_ENV
-          echo "Found NGINX LB Hostname: $HOSTNAME"
+        uses: kodermax/kubectl-aws-eks@master
+        with:
+          args: get service -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' > hostname.txt && echo "NGINX_LB_HOSTNAME=$(cat hostname.txt)" >> $GITHUB_ENV
 
       - name: Refresh Route 53 CNAME Record for NGINX Ingress
         run: |
-          echo "Fetching Hosted Zone ID for launchdarklydemos.com"
+          echo "Fetching Hosted Zone ID for ${{ env.ROOT_DOMAIN }}"
           HOSTED_ZONE_ID=$(aws route53 list-hosted-zones-by-name \
-            --dns-name "launchdarklydemos.com." \
+            --dns-name "${{ env.ROOT_DOMAIN }}." \
             --query "HostedZones[0].Id" \
             --output text)
 
-          RECORD_NAME="${{ env.DEMO_NAMESPACE }}.launchdarklydemos.com"
+          RECORD_NAME="${{ env.DEMO_NAMESPACE }}.${{ env.ROOT_DOMAIN }}"
           echo "Looking for existing record: $RECORD_NAME"
 
           # Fetch matching records
@@ -203,12 +173,8 @@ jobs:
           DEMO_NAMESPACE: ${{ env.DEMO_NAMESPACE }}
           NGINX_LB_HOSTNAME: ${{ env.NGINX_LB_HOSTNAME }}
 
-      - name: Cleanup deploy file
-        if: always()
-        run: |
-          if [ -f ./.github/workflows/deploy_files/deploy.yaml ]; then
-            rm ./.github/workflows/deploy_files/deploy.yaml
-          fi
+      - name: Delete the deploy file
+        run: rm -rf ./.github/workflows/deploy_files
 
       - name: Output Deployment Information
         run: |
