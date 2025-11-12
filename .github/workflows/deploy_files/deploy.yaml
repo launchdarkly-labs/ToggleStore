@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: togglestore-deployment
+  name: ld-core-demo-deployment
   labels:
-    app: togglestore
+    app: ld-core-demo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: togglestore
+      app: ld-core-demo
   template:
     metadata:
       labels:
-        app: togglestore
+        app: ld-core-demo
     spec:
       containers:
-        - name: togglestore
+        - name: ld-core-demo
           image: placeholder4
           ports:
             - name: web
@@ -30,7 +30,7 @@ metadata:
   name: placeholder1
 spec:
   selector:
-    app: togglestore
+    app: ld-core-demo
   ports:
     - protocol: TCP
       port: 80
