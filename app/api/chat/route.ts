@@ -5,6 +5,7 @@ import { initAi, LDTokenUsage } from "@launchdarkly/server-sdk-ai"
 import { logger } from "@/lib/logger"
 import { recordErrorToLD } from "@/lib/launchdarkly/observability-server"
 import { v4 as uuidv4 } from "uuid"
+import products from "@/data/products.json"
 
 interface LaunchDarklyContext {
   kind: string
@@ -19,6 +20,19 @@ interface ChatMessage {
   id?: string
 }
 
+interface CartItemInput {
+  product?: {
+    id?: string
+    name?: string
+    price?: number
+  }
+  productId?: string
+  productName?: string
+  quantity?: number
+  price?: number
+  selectedSize?: string
+}
+
 /**
  * Chat API Route with LaunchDarkly AI SDK Integration
  * Supports real-time model switching via AI Config
@@ -27,7 +41,13 @@ interface ChatMessage {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userInput, chatHistory = [], aiConfigKey = "ai-config--togglebotchatbot" } = body
+    const { 
+      userInput, 
+      chatHistory = [], 
+      aiConfigKey = "ai-config--togglebotchatbot",
+      cartDetails = null,
+      productDetails = null
+    } = body
 
     if (!userInput || typeof userInput !== "string") {
       return new Response(
@@ -64,6 +84,32 @@ export async function POST(request: NextRequest) {
 
     // Initialize AI client
     const aiClient = initAi(ldClient)
+
+    // Prepare product details - use provided productDetails or load from JSON
+    // Format products for AI context (simplified structure with key info)
+    const formattedProducts = productDetails || products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      description: product.description,
+      stock: product.stock,
+      sizes: product.sizes || [],
+      tags: product.tags || [],
+    }))
+
+    // Prepare cart details - format for AI context if provided
+    const formattedCartDetails = cartDetails ? {
+      items: Array.isArray(cartDetails.items) ? cartDetails.items.map((item: CartItemInput) => ({
+        productId: item.product?.id || item.productId,
+        productName: item.product?.name || item.productName,
+        quantity: item.quantity || 0,
+        price: item.product?.price || item.price,
+        selectedSize: item.selectedSize,
+      })) : [],
+      subtotal: cartDetails.subtotal || 0,
+      itemCount: cartDetails.itemCount || (Array.isArray(cartDetails.items) ? cartDetails.items.length : 0),
+    } : null
 
     // Get AI Config with variables for template replacement
     const aiConfig = await aiClient.config(
@@ -177,14 +223,33 @@ export async function POST(request: NextRequest) {
                 return { role: m.role as "user" | "assistant", content }
               })
 
+            // Add context messages for product details and cart details
+            const contextMessages: Array<{ role: "system"; content: string }> = []
+            
+            // Add product catalog information as a system message
+            if (formattedProducts && formattedProducts.length > 0) {
+              contextMessages.push({
+                role: "system",
+                content: `Store Product Catalog:\n${JSON.stringify(formattedProducts, null, 2)}\n\nYou have access to the complete product catalog above. Use this information to help customers find products, answer questions about availability, pricing, and product details.`
+              })
+            }
+
+            // Add cart information as a system message if user has items in cart
+            if (formattedCartDetails && formattedCartDetails.items && formattedCartDetails.items.length > 0) {
+              contextMessages.push({
+                role: "system",
+                content: `User's Shopping Cart:\n${JSON.stringify(formattedCartDetails, null, 2)}\n\nThe user currently has items in their cart. You can reference these items when helping them, suggest related products, or answer questions about their current cart.`
+              })
+            }
+
             // Add chat history to conversation
             const historyMessages = (chatHistory as ChatMessage[]).map((msg) => ({
               role: msg.role as "user" | "assistant",
               content: msg.content,
             }))
 
-            // Combine all messages
-            const allMessages = [...systemMessages, ...conversationMessages, ...historyMessages]
+            // Combine all messages: system messages from AI config, context messages, conversation messages, and chat history
+            const allMessages = [...systemMessages, ...contextMessages, ...conversationMessages, ...historyMessages]
 
             // Get model configuration
             const modelId = model.name

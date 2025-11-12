@@ -176,7 +176,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
   // Select search algorithm based on feature flag
   const searchProducts = useCallback((query: string): Product[] | { featured: Product[]; other: Product[] } => {
     // Default to "simple-search" if flag is not set or invalid
-    const algorithmValue = searchAlgorithm?.toLowerCase().trim()
+    const algorithmValue = searchAlgorithm ? String(searchAlgorithm).toLowerCase().trim() : undefined
     const algorithm = algorithmValue === "featured-list"
       ? "featured-list"
       : "simple-search"
