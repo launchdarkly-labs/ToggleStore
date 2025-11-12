@@ -179,9 +179,6 @@ export function LaunchDarklyProvider({ children, user }: LaunchDarklyProviderPro
                 serviceName: process.env.NEXT_PUBLIC_PROJECT_KEY+"-session-replay",
                 privacySetting: "none",
                 tracingOrigins: true,
-                inlineImages: true,
-                inlineVideos: true,
-                inlineStylesheet: true,
                 contextFriendlyName: (ctx) => {
                   // Build a unique readable key for session replay context
                   // Prefer user, device, location keys if present ("user:<userkey>-device:<devkey>-loc:<lockey>")
