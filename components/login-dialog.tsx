@@ -109,7 +109,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
             </motion.h3>
             <p
               className={`
-                text-[11px] md:text-[12px] leading-normal truncate
+                text-[14px] md:text-[15px] leading-normal truncate
                 ${isSelected ? "text-[#BCBEC0]" : "text-[#58595B]"}
               `}
             >
@@ -118,7 +118,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
           </div>
           <p
             className={`
-              text-[11px] md:text-[12px] leading-normal whitespace-nowrap
+              text-[14px] md:text-[15px] leading-normal whitespace-nowrap
               ${isSelected ? "text-[#7084FF]" : "text-[#A7A9AC]"}
             `}
           >
@@ -145,7 +145,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       >
         {/* Accessible title for screen readers */}
         <VisuallyHidden>
-          <DialogTitle>Switch SSO User</DialogTitle>
+          <DialogTitle>Switch Persona</DialogTitle>
         </VisuallyHidden>
 
         {/* Header with Icon, Title and Close Button */}
@@ -158,7 +158,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               className="w-12 h-12"
             />
           <h2 className="text-white text-[28px] sm:text-[32px] font-bold leading-[1.3] flex-1">
-            Switch SSO User
+            Select Persona
           </h2>
           <button
             onClick={() => onOpenChange(false)}

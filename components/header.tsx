@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { usePathname } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { X, ShoppingCart, QrCode, Sparkles, MoreVertical } from "lucide-react"
 import { Product } from "@/types/product"
@@ -45,6 +46,8 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
     return ""
   })
   const { isLoggedIn, userObject } = useLoginContext()
+  const pathname = usePathname()
+  const isHomePage = pathname === "/"
   
   // Ref for mobile menu dropdown
   const mobileMenuRef = useRef<HTMLDivElement>(null)
@@ -53,6 +56,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
   const flags = useFlags()
   const searchAlgorithm = flags.searchAlgorithm as string | undefined
   const rewardsProgramEnabled = useFlag("rewardsProgram", false)
+  const apiReleaseEnabled = flags["apiRelease"] === true
 
   // Refs for click outside detection
   const desktopSearchRef = useRef<HTMLDivElement>(null)
@@ -266,12 +270,14 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
               className="w-8 h-8"
             />
           </button>
-          <Link href="/" className="flex items-center">
-            <h1 className="text-white text-[16px] sm:text-[20px] md:text-[25.326px] font-sans tracking-[1.2px] sm:tracking-[1.5196px]">
-              <span className="font-normal tracking-[0.25px] sm:tracking-[0.32px]">Toggle</span>
-              <span className="font-bold tracking-[0.38px] sm:tracking-[0.48px]">Store</span>
-            </h1>
-          </Link>
+          {!isHomePage && (
+            <Link href="/" className="flex items-center">
+              <h1 className="text-white text-[20px] sm:text-[24px] md:text-[30px] font-sans tracking-[1.2px] sm:tracking-[1.5196px]">
+                <span className="font-normal tracking-[0.25px] sm:tracking-[0.32px]">Toggle</span>
+                <span className="font-bold tracking-[0.38px] sm:tracking-[0.48px]">Store</span>
+              </h1>
+            </Link>
+          )}
         </div>
 
         {/* Center: Search bar (desktop only) */}
@@ -332,19 +338,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                           className="flex items-center gap-4 p-4 rounded-[15px] border-2 border-[#7084FF] hover:border-[#B3BDFF] cursor-pointer transition-colors bg-linear-to-b from-[#7084FF]/10 to-transparent"
                         >
                           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a] border border-[#7084FF]">
-                            <Image
-                              src={product.images.main}
-                              alt={product.name}
-                              width={80}
-                              height={80}
-                              className="w-full h-full object-cover"
-                            />
+                            {apiReleaseEnabled ? (
+                              <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                                <div
+                                  className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                                  style={{
+                                    WebkitTextFillColor: "transparent",
+                                    backgroundImage:
+                                      "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                                  }}
+                                >
+                                  ?
+                                </div>
+                              </div>
+                            ) : (
+                              <Image
+                                src={product.images.main}
+                                alt={product.name}
+                                width={80}
+                                height={80}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                            <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                            <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                              {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                            </h3>
+                            {apiReleaseEnabled ? (
+                              <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                                25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                              </p>
+                            ) : (
+                              <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                            )}
                             <div className="flex items-center justify-between mt-2">
-                              {isFlashSaleActive ? (
+                              {apiReleaseEnabled ? (
+                                <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                              ) : isFlashSaleActive ? (
                                 <div className="flex flex-col gap-0.5">
                                   <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                                   <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -352,16 +383,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                               ) : (
                                 <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                               )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onAddToCart?.(product, 1, undefined, true)
-                                }}
-                                className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                              >
-                                <ShoppingCart size={14} />
-                                Add
-                              </button>
+                              {apiReleaseEnabled ? (
+                                <button
+                                  disabled
+                                  className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                                >
+                                  Unavailable
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onAddToCart?.(product, 1, undefined, true)
+                                  }}
+                                  className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                                >
+                                  <ShoppingCart size={14} />
+                                  Add
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -385,19 +425,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                           className="flex items-center gap-4 p-4 rounded-[15px] border border-[rgba(178,141,255,0.55)] hover:border-[#7084FF] cursor-pointer transition-colors bg-linear-to-b from-transparent to-black/20"
                         >
                           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a]">
-                            <Image
-                              src={product.images.main}
-                              alt={product.name}
-                              width={80}
-                              height={80}
-                              className="w-full h-full object-cover"
-                            />
+                            {apiReleaseEnabled ? (
+                              <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                                <div
+                                  className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                                  style={{
+                                    WebkitTextFillColor: "transparent",
+                                    backgroundImage:
+                                      "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                                  }}
+                                >
+                                  ?
+                                </div>
+                              </div>
+                            ) : (
+                              <Image
+                                src={product.images.main}
+                                alt={product.name}
+                                width={80}
+                                height={80}
+                                className="w-full h-full object-cover"
+                              />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                            <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                            <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                              {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                            </h3>
+                            {apiReleaseEnabled ? (
+                              <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                                25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                              </p>
+                            ) : (
+                              <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                            )}
                             <div className="flex items-center justify-between mt-2">
-                              {isFlashSaleActive ? (
+                              {apiReleaseEnabled ? (
+                                <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                              ) : isFlashSaleActive ? (
                                 <div className="flex flex-col gap-0.5">
                                   <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                                   <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -405,16 +470,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                               ) : (
                                 <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                               )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onAddToCart?.(product, 1, undefined, true)
-                                }}
-                                className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                              >
-                                <ShoppingCart size={14} />
-                                Add
-                              </button>
+                              {apiReleaseEnabled ? (
+                                <button
+                                  disabled
+                                  className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                                >
+                                  Unavailable
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onAddToCart?.(product, 1, undefined, true)
+                                  }}
+                                  className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                                >
+                                  <ShoppingCart size={14} />
+                                  Add
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -434,19 +508,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                     className="flex items-center gap-4 p-4 rounded-[15px] border border-[rgba(178,141,255,0.55)] hover:border-[#7084FF] cursor-pointer transition-colors bg-linear-to-b from-transparent to-black/20"
                   >
                     <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a]">
-                      <Image
-                        src={product.images.main}
-                        alt={product.name}
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
-                      />
+                      {apiReleaseEnabled ? (
+                        <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                          <div
+                            className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                            style={{
+                              WebkitTextFillColor: "transparent",
+                              backgroundImage:
+                                "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                            }}
+                          >
+                            ?
+                          </div>
+                        </div>
+                      ) : (
+                        <Image
+                          src={product.images.main}
+                          alt={product.name}
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                      <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                      <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                        {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                      </h3>
+                      {apiReleaseEnabled ? (
+                        <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                          25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                        </p>
+                      ) : (
+                        <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                      )}
                       <div className="flex items-center justify-between mt-2">
-                        {isFlashSaleActive ? (
+                        {apiReleaseEnabled ? (
+                          <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                        ) : isFlashSaleActive ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                             <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -454,16 +553,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                         ) : (
                           <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                         )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onAddToCart?.(product, 1, undefined, true)
-                          }}
-                          className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                        >
-                          <ShoppingCart size={14} />
-                          Add
-                        </button>
+                        {apiReleaseEnabled ? (
+                          <button
+                            disabled
+                            className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                          >
+                            Unavailable
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onAddToCart?.(product, 1, undefined, true)
+                            }}
+                            className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                          >
+                            <ShoppingCart size={14} />
+                            Add
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -720,19 +828,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                               className="flex items-center gap-4 p-4 rounded-[15px] border-2 border-[#7084FF] hover:border-[#B3BDFF] cursor-pointer transition-colors bg-linear-to-b from-[#7084FF]/10 to-transparent"
                             >
                               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a] border border-[#7084FF]">
-                                <Image
-                                  src={product.images.main}
-                                  alt={product.name}
-                                  width={80}
-                                  height={80}
-                                  className="w-full h-full object-cover"
-                                />
+                                {apiReleaseEnabled ? (
+                                  <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                                    <div
+                                      className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                                      style={{
+                                        WebkitTextFillColor: "transparent",
+                                        backgroundImage:
+                                          "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                                      }}
+                                    >
+                                      ?
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Image
+                                    src={product.images.main}
+                                    alt={product.name}
+                                    width={80}
+                                    height={80}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                                <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                                <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                                  {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                                </h3>
+                                {apiReleaseEnabled ? (
+                                  <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                                    25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                                  </p>
+                                ) : (
+                                  <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                                )}
                                 <div className="flex items-center justify-between mt-2">
-                                  {isFlashSaleActive ? (
+                                  {apiReleaseEnabled ? (
+                                    <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                                  ) : isFlashSaleActive ? (
                                     <div className="flex flex-col gap-0.5">
                                       <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                                       <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -740,16 +873,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                                   ) : (
                                     <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                                   )}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onAddToCart?.(product, 1)
-                                    }}
-                                    className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                                  >
-                                    <ShoppingCart size={14} />
-                                    Add
-                                  </button>
+                                  {apiReleaseEnabled ? (
+                                    <button
+                                      disabled
+                                      className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                                    >
+                                      Unavailable
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onAddToCart?.(product, 1)
+                                      }}
+                                      className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                                    >
+                                      <ShoppingCart size={14} />
+                                      Add
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -775,19 +917,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                               className="flex items-center gap-4 p-4 rounded-[15px] border border-[rgba(178,141,255,0.55)] hover:border-[#7084FF] cursor-pointer transition-colors bg-linear-to-b from-transparent to-black/20"
                             >
                               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a]">
-                                <Image
-                                  src={product.images.main}
-                                  alt={product.name}
-                                  width={80}
-                                  height={80}
-                                  className="w-full h-full object-cover"
-                                />
+                                {apiReleaseEnabled ? (
+                                  <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                                    <div
+                                      className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                                      style={{
+                                        WebkitTextFillColor: "transparent",
+                                        backgroundImage:
+                                          "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                                      }}
+                                    >
+                                      ?
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Image
+                                    src={product.images.main}
+                                    alt={product.name}
+                                    width={80}
+                                    height={80}
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                                <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                                <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                                  {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                                </h3>
+                                {apiReleaseEnabled ? (
+                                  <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                                    25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                                  </p>
+                                ) : (
+                                  <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                                )}
                                 <div className="flex items-center justify-between mt-2">
-                                  {isFlashSaleActive ? (
+                                  {apiReleaseEnabled ? (
+                                    <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                                  ) : isFlashSaleActive ? (
                                     <div className="flex flex-col gap-0.5">
                                       <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                                       <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -795,16 +962,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                                   ) : (
                                     <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                                   )}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onAddToCart?.(product, 1)
-                                    }}
-                                    className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                                  >
-                                    <ShoppingCart size={14} />
-                                    Add
-                                  </button>
+                                  {apiReleaseEnabled ? (
+                                    <button
+                                      disabled
+                                      className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                                    >
+                                      Unavailable
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onAddToCart?.(product, 1)
+                                      }}
+                                      className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                                    >
+                                      <ShoppingCart size={14} />
+                                      Add
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -825,19 +1001,44 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                         className="flex items-center gap-4 p-4 rounded-[15px] border border-[rgba(178,141,255,0.55)] hover:border-[#7084FF] cursor-pointer transition-colors bg-linear-to-b from-transparent to-black/20"
                       >
                         <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden shrink-0 bg-[#2a2a2a]">
-                          <Image
-                            src={product.images.main}
-                            alt={product.name}
-                            width={80}
-                            height={80}
-                            className="w-full h-full object-cover"
-                          />
+                          {apiReleaseEnabled ? (
+                            <div className="w-full h-full border-2 border-[#545050] border-opacity-10 rounded-[10px] flex items-center justify-center">
+                              <div
+                                className="text-white text-[30px] sm:text-[40px] tracking-[2px] font-mono bg-clip-text"
+                                style={{
+                                  WebkitTextFillColor: "transparent",
+                                  backgroundImage:
+                                    "linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%), linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+                                }}
+                              >
+                                ?
+                              </div>
+                            </div>
+                          ) : (
+                            <Image
+                              src={product.images.main}
+                              alt={product.name}
+                              width={80}
+                              height={80}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">{product.name}</h3>
-                          <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                          <h3 className="text-white text-base sm:text-lg font-bold truncate mb-1">
+                            {apiReleaseEnabled ? "$Load.Itemname.{error}" : product.name}
+                          </h3>
+                          {apiReleaseEnabled ? (
+                            <p className="text-[#58595b] text-xs sm:text-sm truncate">
+                              25 in stock. Available in 5 sizes. Lorem ipsum description of the item. Lorem ipsum description of the item.
+                            </p>
+                          ) : (
+                            <p className="text-[#A7A9AC] text-xs sm:text-sm truncate">{product.description}</p>
+                          )}
                           <div className="flex items-center justify-between mt-2">
-                            {isFlashSaleActive ? (
+                            {apiReleaseEnabled ? (
+                              <span className="text-[#FF35A2] text-sm sm:text-base font-mono">.$Price)</span>
+                            ) : isFlashSaleActive ? (
                               <div className="flex flex-col gap-0.5">
                                 <span className="text-[#7084FF] text-xs font-mono line-through opacity-50">${product.price.toFixed(2)}</span>
                                 <span className="text-[#EBFF38] text-sm sm:text-base font-mono">${getDiscountedPrice(product.price).toFixed(2)}</span>
@@ -845,16 +1046,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                             ) : (
                               <span className="text-[#7084FF] text-sm sm:text-base font-mono">${product.price.toFixed(2)}</span>
                             )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onAddToCart?.(product, 1, undefined, true)
-                              }}
-                              className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
-                            >
-                              <ShoppingCart size={14} />
-                              Add
-                            </button>
+                            {apiReleaseEnabled ? (
+                              <button
+                                disabled
+                                className="border border-[#FF35A2] rounded-[60px] px-3 py-1.5 text-[#FF35A2] text-xs sm:text-sm cursor-not-allowed opacity-100"
+                              >
+                                Unavailable
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onAddToCart?.(product, 1, undefined, true)
+                                }}
+                                className="flex items-center gap-1 text-[#7084FF] hover:text-[#B3BDFF] transition-colors text-xs sm:text-sm"
+                              >
+                                <ShoppingCart size={14} />
+                                Add
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -878,47 +1088,58 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
       {rewardsProgramEnabled && (
         <RewardsDialog open={rewardsDialogOpen} onOpenChange={setRewardsDialogOpen} />
       )}
-
-      {/* QR Code Overlay - Full Screen */}
-      {showQRCode && (
-        <div 
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
-          onClick={(e) => {
-            // Close if clicking on the overlay background (not on content)
-            if (e.target === e.currentTarget) {
-              setShowQRCode(false)
-            }
-          }}
-        >
-          {/* Close button - top right */}
-          <button
-            onClick={() => setShowQRCode(false)}
-            className="absolute top-4 right-4 w-10 h-10 sm:w-12 sm:h-12 rounded-full border-[1.125px] border-[#7084FF] bg-[#7084FF]/10 flex items-center justify-center hover:bg-[#7084FF]/20 transition-colors z-10"
-            aria-label="Close QR Code"
-          >
-            <X size={20} className="text-[#7084FF]" />
-          </button>
-          
-          {/* QR Code Content */}
-          <div className="flex flex-col items-center gap-8 sm:gap-10 w-full max-w-4xl px-4">
-            <p className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
-              Scan to open on your mobile device
-            </p>
-            <div className="bg-white p-8 sm:p-12 md:p-16 rounded-[30px] flex items-center justify-center shadow-2xl">
-              <QRCodeSVG
-                value={currentUrl}
-                size={500}
-                level="M"
-                includeMargin={false}
-              />
-            </div>
-            <p className="text-[#A7A9AC] text-base sm:text-lg md:text-xl text-center break-all max-w-full px-4">
-              {currentUrl}
-            </p>
-          </div>
-        </div>
-      )}
     </header>
+
+    {/* QR Code Overlay - Outside header to avoid positioning constraints */}
+    {showQRCode && (
+      <div 
+        className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 overflow-y-auto"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 99999,
+        }}
+        onClick={(e) => {
+          // Close if clicking on the overlay background (not on content)
+          if (e.target === e.currentTarget) {
+            setShowQRCode(false)
+          }
+        }}
+      >
+        {/* Close button - top right */}
+        <button
+          onClick={() => setShowQRCode(false)}
+          className="fixed top-4 right-4 w-10 h-10 sm:w-12 sm:h-12 rounded-full border-[1.125px] border-[#7084FF] bg-[#7084FF]/10 flex items-center justify-center hover:bg-[#7084FF]/20 transition-colors"
+          style={{ zIndex: 100000 }}
+          aria-label="Close QR Code"
+        >
+          <X size={20} className="text-[#7084FF]" />
+        </button>
+        
+        {/* QR Code Content */}
+        <div className="flex flex-col items-center gap-8 sm:gap-10 w-full max-w-4xl px-4 my-auto">
+          <p className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
+            Scan to open on your mobile device
+          </p>
+          <div className="bg-white p-8 sm:p-12 md:p-16 rounded-[30px] flex items-center justify-center shadow-2xl">
+            <QRCodeSVG
+              value={currentUrl}
+              size={500}
+              level="M"
+              includeMargin={false}
+            />
+          </div>
+          <p className="text-[#A7A9AC] text-base sm:text-lg md:text-xl text-center break-all max-w-full px-4">
+            {currentUrl}
+          </p>
+        </div>
+      </div>
+    )}
     </>
   )
 }

@@ -179,34 +179,8 @@ export function LaunchDarklyProvider({ children, user }: LaunchDarklyProviderPro
                 serviceName: process.env.NEXT_PUBLIC_PROJECT_KEY+"-session-replay",
                 privacySetting: "none",
                 tracingOrigins: true,
-                contextFriendlyName: (ctx) => {
-                  // Build a unique readable key for session replay context
-                  // Prefer user, device, location keys if present ("user:<userkey>-device:<devkey>-loc:<lockey>")
-                  // Fallback to ctx.key or 'anonymous'
-                  const userKey =
-                    typeof ctx === "object" && "user" in ctx && ctx.user && typeof ctx.user === "object" && "key" in ctx.user
-                      ? String(ctx.user.key)
-                      : undefined
-                  const deviceKey =
-                    typeof ctx === "object" && "device" in ctx && ctx.device && typeof ctx.device === "object" && "key" in ctx.device
-                      ? String(ctx.device.key)
-                      : undefined
-                  const locationKey =
-                    typeof ctx === "object" && "location" in ctx && ctx.location && typeof ctx.location === "object" && "key" in ctx.location
-                      ? String(ctx.location.key)
-                      : undefined
-                  if (userKey || deviceKey || locationKey) {
-                    return [
-                      userKey ? `user:${userKey}` : null,
-                      deviceKey ? `device:${deviceKey}` : null,
-                      locationKey ? `loc:${locationKey}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join("-")
-                  }
-                  // Fall back to root context key
-                  return typeof ctx === "object" && "key" in ctx && ctx.key ? String(ctx.key) : "anonymous"
-                }
+                // @ts-expect-error - LDContext is not typed
+                contextFriendlyName: (ctx: LDContext) => ctx.user?.key
               }),
             ],
           },

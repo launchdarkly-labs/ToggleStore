@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react"
 import { useDeveloperMode } from "@/lib/developer-mode-context"
 import { Toast } from "@/components/toast"
 import { Button } from "@/components/ui/button"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 interface CodeSample {
   title: string
@@ -14,26 +16,20 @@ interface CodeSample {
 
 const codeSamples: Record<string, CodeSample> = {
   search: {
-    title: "Search Algorithm Feature Flag",
-    description: "The search functionality uses LaunchDarkly to dynamically switch between different search algorithms.",
+    title: "Search Algorithm Flag",
+    description: "Switch search algorithms instantly with a feature flag — no code deploy needed.",
     language: "typescript",
-    code: `// Get feature flag from LaunchDarkly
-const flags = useFlags()
-const searchAlgorithm = flags.searchAlgorithm as string | undefined
+    code: `// 1. Get the flag value
+const { searchAlgorithm } = useFlags()
 
-// Select search algorithm based on feature flag
-const searchProducts = useCallback((query: string) => {
-  const algorithmValue = searchAlgorithm?.toLowerCase().trim()
-  const algorithm = algorithmValue === "featured-list"
-    ? "featured-list"
-    : "simple-search"
-  
-  if (algorithm === "featured-list") {
-    return searchProductsFeaturedList(query)
-  } else {
-    return searchProductsSimpleSearch(query)
-  }
-}, [searchAlgorithm])`
+// 2. Use different search based on flag
+if (searchAlgorithm === "featured-list") {
+  // Show featured products first
+  return featuredSearch(query)
+} else {
+  // Standard keyword search
+  return simpleSearch(query)
+}`
   },
   persona: {
     title: "LaunchDarkly Context",
@@ -97,31 +93,23 @@ const messages = aiConfig.messages
 // - Monitor and Track AI Metrics`
   },
   banner: {
-    title: "Promotional Banner Feature Flag",
-    description: "The banner content and visibility are controlled by LaunchDarkly feature flags for dynamic promotions.",
+    title: "Promo Banner Flag",
+    description: "Control which promotional banner shows — or hide it entirely — with a single flag change.",
     language: "typescript",
-    code: `// Get banner flag from LaunchDarkly
-const flags = useFlags()
-const storePromoBanner = flags.storePromoBanner as string | undefined
+    code: `// 1. Get the banner flag
+const { storePromoBanner } = useFlags()
 
-// Map flag variations to banner variants
-const getVariant = (flagValue: string | undefined) => {
-  if (!flagValue) return null
-  const normalized = flagValue.toLowerCase().trim()
-  
-  if (normalized === "flash sale") return "flash-sale"
-  if (normalized === "free shipping") return "free-shipping"
-  if (normalized.includes("20 percent")) return "promo-code"
-  return null
+// 2. Show banner based on flag value
+if (storePromoBanner === "flash-sale") {
+  return <FlashSaleBanner />
 }
 
-// Render banner based on flag value
-const variant = getVariant(storePromoBanner)
-if (!variant) return null
+if (storePromoBanner === "free-shipping") {
+  return <FreeShippingBanner />
+}
 
-// Display appropriate banner variant
-{variant === "flash-sale" && <FlashSaleBanner />}
-{variant === "free-shipping" && <FreeShippingBanner />}`
+// No banner if flag is off
+return null`
   },
   "add-button": {
     title: "LaunchDarkly Metrics",
@@ -192,6 +180,7 @@ export function DeveloperModeOverlay() {
   const [hoveredElement, setHoveredElement] = useState<string | null>(null)
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number; showAbove: boolean; width: number; maxHeight: number } | null>(null)
   const popupRef = useRef<HTMLDivElement>(null)
+  const positionLockedRef = useRef<boolean>(false)
   const [isMobile, setIsMobile] = useState(false)
 
   // Check if mobile - must be before any conditional returns
@@ -213,8 +202,8 @@ export function DeveloperModeOverlay() {
       if (!highlightable) return
 
       const rect = highlightable.getBoundingClientRect()
-      const popupWidth = Math.min(400, window.innerWidth - 40)
-      const maxPopupHeight = Math.min(600, window.innerHeight - 40)
+      const popupWidth = Math.min(520, window.innerWidth - 40)
+      const maxPopupHeight = Math.min(650, window.innerHeight - 40)
       const padding = 20
       const offset = 10
       const viewportWidth = window.innerWidth
@@ -292,6 +281,10 @@ export function DeveloperModeOverlay() {
       
       // Check if hovering over the popup itself - keep current popup visible
       if (popupRef.current && popupRef.current.contains(target)) {
+        // Keep the current popup visible - don't change anything
+        if (hoveredElement) {
+          setHoveredElement(hoveredElement)
+        }
         return // Keep current popup visible
       }
       
@@ -299,6 +292,12 @@ export function DeveloperModeOverlay() {
       if (highlightable) {
         const highlightId = highlightable.getAttribute("data-dev-highlight")
         if (highlightId) {
+          // For buttons, unlock position when hovering over a new/different button
+          const isButtonElement = highlightId === "add-button"
+          if (isButtonElement && hoveredElement !== highlightId) {
+            positionLockedRef.current = false
+          }
+          
           // Update to show this element's popup (even if it's different from current)
           setHoveredElement(highlightId)
           
@@ -308,10 +307,12 @@ export function DeveloperModeOverlay() {
           const elementToPosition = (isButton && target.closest('button')) || highlightable
           const rect = elementToPosition.getBoundingClientRect()
           
-          const popupWidth = Math.min(400, window.innerWidth - 40) // Max width with padding
-          const maxPopupHeight = Math.min(600, window.innerHeight - 40) // Max height with padding
+          const popupWidth = Math.min(520, window.innerWidth - 40) // Max width with padding
+          const maxPopupHeight = Math.min(650, window.innerHeight - 40) // Max height with padding
           const padding = 20
-          const offset = 10 // Offset from element
+          // For buttons, use smaller offset to reduce gap and make it easier to reach popup
+          const isButtonElementType = highlightId === "add-button" || isButton
+          const offset = isButtonElementType ? 5 : 10 // Smaller offset for buttons
           
           // Calculate available space
           const viewportWidth = window.innerWidth
@@ -381,6 +382,11 @@ export function DeveloperModeOverlay() {
           }
           
           setPopupPosition({ x: popupX, y: popupY, showAbove, width: popupWidth, maxHeight: maxPopupHeight })
+          
+          // Lock position for buttons once initially set
+          if (isButtonElement) {
+            positionLockedRef.current = true
+          }
         }
       } else {
         // Check if we're hovering over a different highlighted element
@@ -415,6 +421,9 @@ export function DeveloperModeOverlay() {
       // Check if we're leaving the highlighted element
       const highlightable = target.closest("[data-dev-highlight]")
       if (highlightable) {
+        const highlightId = highlightable.getAttribute("data-dev-highlight")
+        const isButton = highlightId === "add-button" || target.tagName === 'BUTTON' || target.closest('button')
+        
         // Check if the related target is still within the highlighted element
         if (relatedTarget && highlightable.contains(relatedTarget)) {
           return // Still inside, don't clear
@@ -431,6 +440,31 @@ export function DeveloperModeOverlay() {
             return
           }
         }
+        
+        // For buttons, use a longer delay to allow movement to popup (which may have a gap)
+        const delay = isButton ? 300 : 150
+        
+        // Only hide if mouse is truly leaving (with delay to allow movement to popup)
+        setTimeout(() => {
+          // Double-check that we're not hovering over popup or any highlighted element
+          if (popupRef.current && popupRef.current.matches(':hover')) {
+            return // Still hovering over popup
+          }
+          const currentHighlight = document.querySelector(`[data-dev-highlight="${hoveredElement}"]`)
+          if (currentHighlight && currentHighlight.matches(':hover')) {
+            return // Still hovering over highlighted element
+          }
+          // Check if hovering over any highlighted element
+          const anyHighlight = document.querySelector('[data-dev-highlight]:hover')
+          if (anyHighlight) {
+            return // Hovering over a different highlighted element
+          }
+        // Finally clear if nothing is being hovered
+        setHoveredElement(null)
+        setPopupPosition(null)
+        positionLockedRef.current = false // Unlock when clearing
+      }, delay)
+        return // Don't continue with the rest of the function
       }
       
       // Only clear if we're truly leaving and not going to popup or another highlighted element
@@ -463,24 +497,41 @@ export function DeveloperModeOverlay() {
         // Finally clear if nothing is being hovered
         setHoveredElement(null)
         setPopupPosition(null)
+        positionLockedRef.current = false // Unlock when clearing
       }, 150) // Small delay to allow smooth movement to popup
     }
 
     const handleMouseMove = (e: MouseEvent) => {
       if (hoveredElement) {
+        const target = e.target as HTMLElement
+        
+        // Don't reposition if mouse is over the popup itself
+        if (popupRef.current && popupRef.current.contains(target)) {
+          return // Keep position stable when hovering over popup
+        }
+        
         const highlightable = document.querySelector(`[data-dev-highlight="${hoveredElement}"]`)
         if (highlightable) {
+          // For buttons, lock the position once set - don't recalculate on mouse move
+          // This prevents the popup from jumping around when moving from button to popup
+          const isButtonElement = hoveredElement === "add-button"
+          if (isButtonElement && positionLockedRef.current) {
+            // Position is locked for this button, don't recalculate
+            return
+          }
+          
           // Check if mouse is over a button within the highlighted element
-          const target = e.target as HTMLElement
           const isButton = target.tagName === 'BUTTON' || target.closest('button')
           const elementToPosition = (isButton && target.closest('button')) || highlightable
           const rect = elementToPosition.getBoundingClientRect()
           
           // Calculate optimal popup position that stays within viewport
-          const popupWidth = Math.min(400, window.innerWidth - 40)
-          const maxPopupHeight = Math.min(600, window.innerHeight - 40)
+          const popupWidth = Math.min(520, window.innerWidth - 40)
+          const maxPopupHeight = Math.min(650, window.innerHeight - 40)
           const padding = 20
-          const offset = 10
+          // For buttons, use smaller offset to reduce gap
+          const isButtonElementType = hoveredElement === "add-button" || isButton
+          const offset = isButtonElementType ? 5 : 10
           
           const viewportWidth = window.innerWidth
           const viewportHeight = window.innerHeight
@@ -541,6 +592,11 @@ export function DeveloperModeOverlay() {
           }
           
           setPopupPosition({ x: popupX, y: popupY, showAbove, width: popupWidth, maxHeight: maxPopupHeight })
+          
+          // Lock position for buttons once set
+          if (isButtonElement) {
+            positionLockedRef.current = true
+          }
         }
       }
     }
@@ -565,7 +621,7 @@ export function DeveloperModeOverlay() {
   return (
     <>
       {/* Persistent toast when developer mode is enabled */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] pointer-events-none w-full max-w-[calc(100vw-32px)] sm:max-w-md px-4 hidden md:block">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 pointer-events-none w-full max-w-[calc(100vw-32px)] sm:max-w-md px-4 hidden md:block" style={{ zIndex: 100000 }}>
         <Toast
           variant="success"
           message="Hover over components to see LaunchDarkly code samples"
@@ -573,7 +629,7 @@ export function DeveloperModeOverlay() {
       </div>
 
       {/* Disable Developer Mode Button */}
-      <div className="fixed bottom-4 left-4 md:left-8 z-[10000] pointer-events-auto hidden md:block">
+      <div className="fixed bottom-4 left-4 md:left-8 pointer-events-auto hidden md:block" style={{ zIndex: 100000 }}>
         <Button
           onClick={toggle}
           variant="default"
@@ -584,15 +640,6 @@ export function DeveloperModeOverlay() {
       </div>
       {/* Highlighted Elements */}
       <style jsx global>{`
-        @keyframes subtle-pulse {
-          0%, 100% {
-            opacity: 0.3;
-          }
-          50% {
-            opacity: 0.5;
-          }
-        }
-        
         [data-dev-highlight]:not([style*="position: fixed"]):not(.fixed):not([style*="position: absolute"]):not([data-dev-highlight="sdk-init"]) {
           position: relative;
         }
@@ -601,10 +648,10 @@ export function DeveloperModeOverlay() {
           position: absolute !important;
         }
         [data-dev-highlight]:not([data-dev-highlight="banner"]) {
-          z-index: 9999;
+          z-index: 99999 !important;
         }
         [data-dev-highlight="banner"] {
-          z-index: 40 !important;
+          z-index: 99999 !important;
         }
         [data-dev-highlight][style*="position: fixed"],
         [data-dev-highlight].fixed {
@@ -619,7 +666,6 @@ export function DeveloperModeOverlay() {
             0 0 10px rgba(112, 132, 255, 0.2),
             0 0 20px rgba(112, 132, 255, 0.15),
             inset 0 0 10px rgba(112, 132, 255, 0.05);
-          transition: all 0.3s ease;
         }
         
         /* Special styling for SDK init to prevent image shrinking */
@@ -641,8 +687,6 @@ export function DeveloperModeOverlay() {
           border-radius: inherit;
           background: radial-gradient(circle at center, rgba(112, 132, 255, 0.15) 0%, transparent 70%);
           opacity: 0.4;
-          animation: subtle-pulse 3s ease-in-out infinite;
-          transition: opacity 0.3s ease, outline 0.3s ease;
           pointer-events: none;
           z-index: -1;
           box-shadow: 
@@ -652,7 +696,6 @@ export function DeveloperModeOverlay() {
         
         [data-dev-highlight="sdk-init"]:hover::before {
           opacity: 1;
-          animation: none;
           outline: 2px solid #7084FF;
           top: -6px;
           left: -6px;
@@ -684,8 +727,6 @@ export function DeveloperModeOverlay() {
           border-radius: inherit;
           background: radial-gradient(circle at center, rgba(112, 132, 255, 0.15) 0%, transparent 70%);
           opacity: 0.4;
-          animation: subtle-pulse 3s ease-in-out infinite;
-          transition: opacity 0.3s ease;
           pointer-events: none;
           z-index: -1;
         }
@@ -693,34 +734,37 @@ export function DeveloperModeOverlay() {
         /* Enhanced background glow on hover */
         [data-dev-highlight]:not([data-dev-highlight="sdk-init"]):hover::before {
           opacity: 1;
-          animation: none;
           background: radial-gradient(circle at center, rgba(112, 132, 255, 0.3) 0%, transparent 70%);
         }
         
         /* Custom scrollbar for code popup */
         .code-popup-scroll::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
+          width: 10px;
+          height: 10px;
         }
         .code-popup-scroll::-webkit-scrollbar-track {
-          background: #0a0a0a;
-          border-radius: 4px;
+          background: #0d0d0d;
+          border-radius: 5px;
         }
         .code-popup-scroll::-webkit-scrollbar-thumb {
           background: #7084FF;
-          border-radius: 4px;
+          border-radius: 5px;
         }
         .code-popup-scroll::-webkit-scrollbar-thumb:hover {
-          background: #405BFF;
+          background: #8B9BFF;
         }
       `}</style>
 
       {/* Code Sample Popup */}
       {hoveredElement && codeSample && popupPosition && (
-        <div
-          ref={popupRef}
-          className="fixed z-[10000] bg-[#191919] border-2 border-[#7084FF] rounded-[15px] p-6 shadow-2xl pointer-events-auto flex flex-col"
+        <>
+          {/* Semi-transparent backdrop - pointer-events-none to allow hover through to highlighted elements */}
+          <div className="fixed inset-0 bg-black/60 pointer-events-none" style={{ zIndex: 99998 }} />
+          <div
+            ref={popupRef}
+            className="fixed bg-[#191919] border-2 border-[#7084FF] rounded-[20px] p-8 shadow-2xl pointer-events-auto flex flex-col"
           style={{
+            zIndex: 100000,
             left: `${popupPosition.x}px`,
             top: `${popupPosition.y}px`,
             width: `${popupPosition.width}px`,
@@ -729,7 +773,11 @@ export function DeveloperModeOverlay() {
             transform: popupPosition.showAbove ? "translateY(-100%)" : "translateY(0)",
           }}
           onMouseEnter={() => {
-            // Keep popup visible when hovering over it
+            // Keep popup visible when hovering over it - don't clear
+            if (hoveredElement) {
+              // Ensure the popup stays visible
+              setHoveredElement(hoveredElement)
+            }
           }}
           onMouseLeave={(e) => {
             // Only hide if mouse is not moving to highlighted element or another highlighted element
@@ -774,18 +822,40 @@ export function DeveloperModeOverlay() {
             }, 200) // Longer delay to allow smooth movement
           }}
         >
-          <div className="flex flex-col gap-4 min-h-0 flex-1 overflow-hidden">
+          <div className="flex flex-col gap-5 min-h-0 flex-1 overflow-hidden">
             <div className="flex-shrink-0">
-              <h3 className="text-white text-lg font-bold mb-1">{codeSample.title}</h3>
-              <p className="text-[#A7A9AC] text-sm leading-relaxed">{codeSample.description}</p>
+              <h3 className="text-white text-2xl font-bold mb-2">{codeSample.title}</h3>
+              <p className="text-[#B8BABD] text-lg leading-relaxed">{codeSample.description}</p>
             </div>
-            <div className="bg-[#0a0a0a] rounded-[10px] p-4 border border-[#58595B] flex-1 min-h-0 overflow-auto code-popup-scroll" style={{ scrollbarWidth: 'thin', scrollbarColor: '#7084FF #0a0a0a' }}>
-              <pre className="text-[12px] text-[#7084FF] font-mono leading-relaxed whitespace-pre-wrap">
-                <code>{codeSample.code}</code>
-              </pre>
+            <div className="bg-[#0d0d0d] rounded-[12px] border border-[#7084FF]/30 flex-1 min-h-0 overflow-auto code-popup-scroll" style={{ scrollbarWidth: 'thin', scrollbarColor: '#7084FF #0d0d0d' }}>
+              <SyntaxHighlighter
+                language={codeSample.language}
+                style={vscDarkPlus}
+                customStyle={{
+                  margin: 0,
+                  padding: '24px',
+                  fontSize: '17px',
+                  lineHeight: '1.8',
+                  background: '#0d0d0d',
+                  borderRadius: '12px',
+                }}
+                codeTagProps={{
+                  style: {
+                    fontFamily: '"Fira Code", "JetBrains Mono", Consolas, monospace',
+                    fontSize: '17px',
+                    fontWeight: 500,
+                  }
+                }}
+                showLineNumbers={false}
+                wrapLines={true}
+                wrapLongLines={true}
+              >
+                {codeSample.code}
+              </SyntaxHighlighter>
             </div>
           </div>
         </div>
+        </>
       )}
     </>
   )

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { motion, useScroll, useTransform, Variants } from "framer-motion"
 import { Header } from "@/components/header"
 import { ProductCard } from "@/components/product-card"
 import { Cart } from "@/components/cart"
@@ -19,6 +20,71 @@ import { recordErrorToLD } from "@/lib/launchdarkly/observability"
 import { useTrackMetric } from "@/lib/launchdarkly/metrics"
 
 const products = productsData as Product[]
+
+// Animation Variants
+const heroTextLeft: Variants = {
+	hidden: { opacity: 0, x: -100, filter: "blur(10px)" },
+	visible: { 
+		opacity: 1, 
+		x: 0, 
+		filter: "blur(0px)",
+		transition: { duration: 1, ease: [0.25, 0.46, 0.45, 0.94] }
+	}
+}
+
+const heroTextRight: Variants = {
+	hidden: { opacity: 0, x: 100, filter: "blur(10px)" },
+	visible: { 
+		opacity: 1, 
+		x: 0, 
+		filter: "blur(0px)",
+		transition: { duration: 1, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.2 }
+	}
+}
+
+const heroMascot: Variants = {
+	hidden: { opacity: 0, scale: 0.5, rotate: -10 },
+	visible: { 
+		opacity: 1, 
+		scale: 1, 
+		rotate: 0,
+		transition: { 
+			duration: 1.2, 
+			ease: [0.34, 1.56, 0.64, 1], // Spring-like bounce
+			delay: 0.4
+		}
+	}
+}
+
+const carouselReveal: Variants = {
+	hidden: { opacity: 0, x: -100 },
+	visible: { 
+		opacity: 1, 
+		x: 0,
+		transition: { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] }
+	}
+}
+
+const glowPulse: Variants = {
+	hidden: { opacity: 0, scale: 1.2 },
+	visible: { 
+		opacity: 1, 
+		scale: 1,
+		transition: { duration: 1.5, ease: "easeOut" }
+	}
+}
+
+const pageTransition: Variants = {
+	hidden: { opacity: 0 },
+	visible: { 
+		opacity: 1,
+		transition: { 
+			duration: 0.6, 
+			ease: "easeOut",
+			when: "beforeChildren"
+		}
+	}
+}
 
 export default function Home() {
 	// Get banner flag to determine padding calculation
@@ -57,10 +123,12 @@ export default function Home() {
 	const lastTimeRef = useRef(0)
 	const isDraggingRef = useRef(false)
 	const startXRef = useRef(0)
+	const startYRef = useRef(0)
 	const currentXRef = useRef(0)
 	const scrollOffsetRef = useRef(0)
 	const animationFrameRef = useRef<number | null>(null)
 	const manualAnimationRef = useRef(false)
+	const swipeDirectionRef = useRef<'horizontal' | 'vertical' | null>(null)
 
 	const categories = ["All", "Apparel", "Drinkware", "Accessories"]
 	const featuredProducts = products.filter((p) => p.featured)
@@ -422,33 +490,58 @@ export default function Home() {
 		handleDragEnd()
 	}, [handleDragEnd])
 	
-	// Touch event handlers
+	// Touch event handlers - allow vertical scroll, only capture horizontal swipes
 	const handleTouchStart = useCallback((e: React.TouchEvent) => {
-		e.preventDefault()
+		// Don't prevent default - let browser handle scroll initially
 		lastTimeRef.current = Date.now()
+		swipeDirectionRef.current = null // Reset direction detection
 		if (e.touches.length > 0) {
-			handleDragStart(e.touches[0].clientX)
+			startYRef.current = e.touches[0].clientY
+			// Store initial position but don't start drag yet
+			startXRef.current = e.touches[0].clientX
 		}
-	}, [handleDragStart])
+	}, [])
 	
 	const handleTouchMove = useCallback((e: React.TouchEvent) => {
-		if (!isDraggingRef.current) return
-		e.preventDefault()
-		if (e.touches.length > 0) {
-			handleDragMove(e.touches[0].clientX)
+		if (e.touches.length === 0) return
+		
+		const currentX = e.touches[0].clientX
+		const currentY = e.touches[0].clientY
+		const deltaX = Math.abs(currentX - startXRef.current)
+		const deltaY = Math.abs(currentY - startYRef.current)
+		
+		// Determine swipe direction on first significant movement
+		if (swipeDirectionRef.current === null && (deltaX > 10 || deltaY > 10)) {
+			if (deltaX > deltaY) {
+				// Horizontal swipe - engage carousel
+				swipeDirectionRef.current = 'horizontal'
+				handleDragStart(startXRef.current)
+			} else {
+				// Vertical swipe - let page scroll
+				swipeDirectionRef.current = 'vertical'
+			}
+		}
+		
+		// Only handle horizontal swipes for carousel
+		if (swipeDirectionRef.current === 'horizontal' && isDraggingRef.current) {
+			e.preventDefault() // Only prevent default for horizontal swipes
+			handleDragMove(currentX)
 			lastTimeRef.current = Date.now()
 		}
-	}, [handleDragMove])
+		// Vertical swipes will naturally scroll the page (no preventDefault)
+	}, [handleDragStart, handleDragMove])
 	
 	const handleTouchEnd = useCallback(() => {
-		if (isDraggingRef.current) {
+		if (swipeDirectionRef.current === 'horizontal' && isDraggingRef.current) {
 			handleDragEnd()
 		}
+		swipeDirectionRef.current = null // Reset for next touch
 	}, [handleDragEnd])
 	
 	// Global touch move handler for better mobile support
 	const handleTouchMoveGlobal = useCallback((e: TouchEvent) => {
-		if (isDraggingRef.current && e.touches.length > 0) {
+		// Only handle if we've determined this is a horizontal swipe
+		if (swipeDirectionRef.current === 'horizontal' && isDraggingRef.current && e.touches.length > 0) {
 			e.preventDefault()
 			handleDragMove(e.touches[0].clientX)
 			lastTimeRef.current = Date.now()
@@ -456,9 +549,10 @@ export default function Home() {
 	}, [handleDragMove])
 	
 	const handleTouchEndGlobal = useCallback(() => {
-		if (isDraggingRef.current) {
+		if (swipeDirectionRef.current === 'horizontal' && isDraggingRef.current) {
 			handleDragEnd()
 		}
+		swipeDirectionRef.current = null
 	}, [handleDragEnd])
 	
 	// Handle global mouse and touch events during drag
@@ -629,10 +723,26 @@ export default function Home() {
 
 	const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
+	// Scroll-based parallax for hero section
+	const { scrollY } = useScroll()
+	const heroY = useTransform(scrollY, [0, 500], [0, 150])
+	const heroOpacity = useTransform(scrollY, [0, 300], [1, 0])
+	
+
 	return (
-		<div className="min-h-screen bg-[#191919] relative overflow-x-hidden no-scrollbar">
-			{/* Background Effects */}
-			<div className="fixed inset-0 z-0 pointer-events-none overflow-hidden w-full h-full">
+		<motion.div 
+			className="min-h-screen bg-[#191919] relative overflow-x-hidden no-scrollbar"
+			variants={pageTransition}
+			initial="hidden"
+			animate="visible"
+		>
+			{/* Background Effects with fade-in */}
+			<motion.div 
+				className="fixed inset-0 z-0 pointer-events-none overflow-hidden w-full h-full"
+				initial={{ opacity: 0, scale: 1.1 }}
+				animate={{ opacity: 1, scale: 1 }}
+				transition={{ duration: 1.8, ease: "easeOut" }}
+			>
 				<Image
 					src="/storefront/background glows.svg"
 					alt=""
@@ -641,25 +751,34 @@ export default function Home() {
 					className="object-cover w-full h-full opacity-50 pointer-events-none"
 					priority
 				/>
-			</div>
+			</motion.div>
 
-			{/* Header */}
-			<Header 
-				onCartOpen={() => {
-					setCartOpen(true)
-					trackMetric("cart-accessed")
-				}} 
-				cartItemCount={totalItems}
-				onAddToCart={(product, quantity, selectedSize, fromSearch) => handleAddToCart(product, quantity, selectedSize, fromSearch)}
-				onViewProduct={handleViewProduct}
-				onSidebarOpen={() => setSidebarOpen(true)}
-			/>
+			{/* Header with slide-down animation */}
+			<motion.div
+				initial={{ opacity: 0, y: -50 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.2 }}
+			>
+				<Header 
+					onCartOpen={() => {
+						setCartOpen(true)
+						trackMetric("cart-accessed")
+					}} 
+					cartItemCount={totalItems}
+					onAddToCart={(product, quantity, selectedSize, fromSearch) => handleAddToCart(product, quantity, selectedSize, fromSearch)}
+					onViewProduct={handleViewProduct}
+					onSidebarOpen={() => setSidebarOpen(true)}
+				/>
+			</motion.div>
 
 			{/* Content wrapper with top padding to account for header and banner */}
 			<div className={`${showBanner ? 'pt-[154px] md:pt-[160px]' : 'pt-[100px] md:pt-[106px]'}`}>
 
-			{/* Hero Section */}
-			<div className="w-full flex justify-center mt-20 md:mt-25 lg:mt-30">
+			{/* Hero Section with parallax */}
+			<motion.div 
+				className="w-full flex justify-center mt-10 md:mt-25 lg:mt-30"
+				style={{ y: heroY, opacity: heroOpacity }}
+			>
 				<div
 					className="
             flex flex-row items-center justify-center
@@ -671,8 +790,11 @@ export default function Home() {
             max-w-[1550px]
           "
 				>
-					{/* "Toggle" text */}
-					<h1
+					{/* "Toggle" text with slide-in from left */}
+					<motion.h1
+						variants={heroTextLeft}
+						initial="hidden"
+						animate="visible"
 						className="
               text-[clamp(20px,12vw,64px)]
               md:text-[clamp(48px,18vw,100px)]
@@ -704,29 +826,53 @@ export default function Home() {
 						}}
 					>
 						Toggle
-					</h1>
+					</motion.h1>
 
-				{/* Toggle SVG - positioned absolutely in the middle */}
-				<div className="absolute ml-10 md:ml-20 lg:ml-35 top-1/2  -translate-y-1/2 z-20" data-dev-highlight="sdk-init">
-					<Image
-						src="/storefront/ToggleHomePage.png"
-						alt="Toggle Mascot"
-						width={414}
-						height={414}
-						className="
-              w-[clamp(100px,30vw,414px)] 
-              h-[clamp(100px,30vw,414px)]
-              md:w-[clamp(200px,30vw,414px)]
-              md:h-[clamp(200px,30vw,414px)]
-              lg:w-[clamp(300px,30vw,414px)]
-              lg:h-[clamp(300px,30vw,414px)]
-              xl:w-[clamp(400px,30vw,414px)]
-              xl:h-[clamp(400px,30vw,414px)]
+				{/* Toggle Mascot - entrance animation + floating */}
+				<motion.div 
+					variants={heroMascot}
+					initial="hidden"
+					animate="visible"
+					className="absolute ml-10 md:ml-20 lg:ml-35 top-1/2 -translate-y-1/2 z-20" 
+					data-dev-highlight="sdk-init"
+				>
+					<motion.div
+						animate={{ y: [0, -8, 0] }}
+						transition={{
+							duration: 5,
+							repeat: Infinity,
+							ease: "easeInOut",
+						}}
+						style={{
+							willChange: "transform",
+							transform: "translateZ(0)",
+							backfaceVisibility: "hidden",
+						}}
+					>
+						<Image
+							src="/storefront/ToggleHomePage.png"
+							alt="Toggle Mascot"
+							width={414}
+							height={414}
+							className="
+                w-[clamp(100px,30vw,414px)] 
+                h-[clamp(100px,30vw,414px)]
+                md:w-[clamp(200px,30vw,414px)]
+                md:h-[clamp(200px,30vw,414px)]
+                lg:w-[clamp(300px,30vw,414px)]
+                lg:h-[clamp(300px,30vw,414px)]
+                xl:w-[clamp(400px,30vw,414px)]
+                xl:h-[clamp(400px,30vw,414px)]
               "
-					/>
-				</div>
+						/>
+					</motion.div>
+				</motion.div>
 
-					<h1
+					{/* "Store" text with slide-in from right */}
+					<motion.h1
+						variants={heroTextRight}
+						initial="hidden"
+						animate="visible"
 						className="
               text-[clamp(20px,12vw,64px)]
               md:text-[clamp(48px,18vw,100px)]
@@ -749,14 +895,24 @@ export default function Home() {
 						}}
 					>
 						Store
-					</h1>
+					</motion.h1>
 				</div>
-			</div>
+			</motion.div>
 
 		{/* Featured Carousel Section with Purple Glow */}
-		<div className="w-full relative mt-20 md:mt-32 lg:mt-40">
-			{/* Purple Glow Background - Not clipped */}
-			<div className="absolute left-1/2 bottom-60  -translate-x-1/2 translate-y-1/2 w-[150vw] h-auto aspect-1504/1137 pointer-events-none z-0 scale-100 md:scale-110 lg:scale-125 xl:scale-150 2xl:scale-175 opacity-100 md:opacity-90 lg:opacity- xl:opacity-76 2xl:opacity-80">
+		<motion.div 
+			className="w-full relative mt-20 md:mt-32 lg:mt-40"
+			initial={{ opacity: 0 }}
+			animate={{ opacity: 1 }}
+			transition={{ duration: 1, delay: 0.8 }}
+		>
+			{/* Purple Glow Background with pulse animation */}
+			<motion.div 
+				variants={glowPulse}
+				initial="hidden"
+				animate="visible"
+				className="absolute left-1/2 bottom-60  -translate-x-1/2 translate-y-1/2 w-[150vw] h-auto aspect-1504/1137 pointer-events-none z-0 scale-100 md:scale-110 lg:scale-125 xl:scale-150 2xl:scale-175 opacity-100 md:opacity-90 lg:opacity- xl:opacity-76 2xl:opacity-80"
+			>
 				<Image
 					src="/storefront/purple glow.svg"
 					alt=""
@@ -764,29 +920,45 @@ export default function Home() {
 					height={1137}
 					className="w-full h-full object-contain"
 				/>
-			</div>
+			</motion.div>
 			
-			{/* Featured Carousel - Infinite Scroll */}
-			<div className="w-full overflow-hidden relative z-10 py-8">
+			{/* Featured Carousel - Infinite Scroll with reveal animation */}
+			<motion.div 
+				className="w-full overflow-hidden relative z-10 py-8"
+				variants={carouselReveal}
+				initial="hidden"
+				animate="visible"
+				transition={{ delay: 0.6 }}
+			>
 				<div 
 					ref={carouselRef}
-					className="featured-carousel-infinite flex gap-6 md:gap-[29px] items-center cursor-grab select-none touch-pan-x" 
-					style={{ width: 'max-content', userSelect: 'none', WebkitUserSelect: 'none' }}
+					className="featured-carousel-infinite flex gap-6 md:gap-[29px] items-center cursor-grab select-none touch-action-pan-y" 
+					style={{ width: 'max-content', userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-y' }}
 					onMouseDown={handleMouseDown}
 					onTouchStart={handleTouchStart}
 					onTouchMove={handleTouchMove}
 					onTouchEnd={handleTouchEnd}
 				>
 					{/* First set of products */}
-					{featuredProducts.map((product) => (
-						<div key={`featured-1-${product.id}`} className="product-card-wrapper shrink-0">
+					{featuredProducts.map((product, index) => (
+						<motion.div 
+							key={`featured-1-${product.id}`} 
+							className="product-card-wrapper shrink-0"
+							initial={{ opacity: 0, scale: 0.9 }}
+							animate={{ opacity: 1, scale: 1 }}
+							transition={{ 
+								duration: 0.5, 
+								delay: 0.8 + (index * 0.1),
+								ease: [0.25, 0.46, 0.45, 0.94]
+							}}
+						>
 							<ProductCard
 								product={product}
 								featured
 								onAddToCart={handleAddToCart}
 								onViewDetails={handleViewProduct}
 							/>
-						</div>
+						</motion.div>
 					))}
 					{/* Duplicate set for seamless loop */}
 					{featuredProducts.map((product) => (
@@ -800,23 +972,48 @@ export default function Home() {
 						</div>
 					))}
 				</div>
-			</div>
-		</div>
+			</motion.div>
+		</motion.div>
 
 			{/* API Errors Display (when apiRelease is enabled) */}
 			{apiReleaseEnabled && apiErrors.length > 0 && (
-				<div className="w-full px-4 md:px-8 lg:px-[182px] mt-8">
-					<div className="bg-[#212121] border border-[#FF35A2] rounded-[10px] p-4 space-y-2">
-						<div className="text-[#FF35A2] text-[12px] tracking-[1.8px] uppercase font-bold mb-2">
+				<motion.div 
+					className="w-full px-4 md:px-8 lg:px-[182px] mt-8"
+					initial={{ opacity: 0, y: -20, scale: 0.95 }}
+					animate={{ opacity: 1, y: 0, scale: 1 }}
+					transition={{ duration: 0.4, ease: "easeOut" }}
+				>
+					<motion.div 
+						className="bg-[#212121] border border-[#FF35A2] rounded-[10px] p-4 space-y-2"
+						animate={{ 
+							boxShadow: [
+								"0 0 0 rgba(255, 53, 162, 0)",
+								"0 0 20px rgba(255, 53, 162, 0.3)",
+								"0 0 0 rgba(255, 53, 162, 0)"
+							]
+						}}
+						transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+					>
+						<motion.div 
+							className="text-[#FF35A2] text-[12px] tracking-[1.8px] uppercase font-bold mb-2"
+							animate={{ opacity: [1, 0.7, 1] }}
+							transition={{ duration: 1.5, repeat: Infinity }}
+						>
 							Backend Errors Detected
-						</div>
+						</motion.div>
 						{apiErrors.slice(0, 3).map((error, index) => (
-							<div key={index} className="text-[#a7a9ac] text-[11px] leading-relaxed">
+							<motion.div 
+								key={index} 
+								className="text-[#a7a9ac] text-[11px] leading-relaxed"
+								initial={{ opacity: 0, x: -10 }}
+								animate={{ opacity: 1, x: 0 }}
+								transition={{ delay: index * 0.1 }}
+							>
 								{error}
-							</div>
+							</motion.div>
 						))}
-					</div>
-				</div>
+					</motion.div>
+				</motion.div>
 			)}
 
 			{/* Filters */}
@@ -877,7 +1074,7 @@ export default function Home() {
 						<Button
 							key={category}
 							variant={selectedCategory === category ? "default" : "outline"}
-							className={`rounded-[60px] px-6 md:px-[37.8px] py-[29px] whitespace-nowrap text-xl md:text-xl z-10 ${
+							className={`rounded-[60px] px-6 md:px-[37.8px] py-[29px] whitespace-nowrap text-xl md:text-xl z-10 transition-all duration-300 ${
 								selectedCategory === category
 									? "text-white category-button-selected"
 									: "border-[#7084ff] text-[#7084FF] bg-[#191919] hover:border-[#7084FF] hover:bg-transparent hover:text-[#B3BDFF]"
@@ -922,7 +1119,7 @@ export default function Home() {
 						<Button
 							variant="default"
 							className="rounded-[60px] px-6 md:px-[37.8px] py-[29px] whitespace-nowrap text-xl md:text-xl z-10 text-white category-button-selected w-full sm:w-auto"
-							onClick={() => window.open("https://launchdarkly.com/request-a-demo/", "_blank")}
+							onClick={() => window.open("https://launchdarkly.com/event-follow-up/?utm_source=event&utm_medium=meetingrequested&utm_campaign=pltf&utm_term=awsreinv25", "_blank")}
 						>
 							Book Meeting
 						</Button>
@@ -968,11 +1165,11 @@ export default function Home() {
 			/>
 
 			{/* ChatBot */}
-			<ChatBot />
+			<ChatBot onAddToCart={handleAddToCart} />
 
 			{/* Developer Mode Overlay */}
 			<DeveloperModeOverlay />
 			</div>
-		</div>
+		</motion.div>
 	)
 }

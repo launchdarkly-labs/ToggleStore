@@ -168,6 +168,10 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
         key: "togglestore",
         name: "ToggleStore",
         application: "togglestore",
+      },
+      ai: {
+        key: "ai-context",
+        fallback: false, // Default to false, set to true when AI judges detect bad responses
       }
     }
     
@@ -209,6 +213,10 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
         tier: newTier,
         anonymous: false,
       },
+      ai: {
+        key: "ai-context",
+        fallback: false, // Reset to false when context is updated
+      }
     }
 
     setAppMultiContext(context)
@@ -261,6 +269,10 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
         key: "togglestore",
         name: "ToggleStore",
         application: "togglestore",
+      },
+      ai: {
+        key: "ai-context",
+        fallback: false, // Default to false, set to true when AI judges detect bad responses
       }
     }
 
