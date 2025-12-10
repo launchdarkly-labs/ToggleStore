@@ -1,0 +1,23 @@
+{
+  "name": "ToggleStore - LaunchDarkly Demo",
+  "short_name": "ToggleStore",
+  "description": "E-commerce demo application showcasing LaunchDarkly feature flags",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#191919",
+  "theme_color": "#7084FF",
+  "icons": [
+    {
+      "src": "/storefront/ToggleHomePage.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
+

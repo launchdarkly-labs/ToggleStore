@@ -8,7 +8,6 @@ This is a Next.js e-commerce application built to demonstrate LaunchDarkly's fea
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
 - **UI Components**: shadcn/ui
-- **Authentication**: NextAuth.js v5 with Google OAuth (LaunchDarkly domain restricted)
 - **Feature Flags**: LaunchDarkly SDK (client-side and server-side)
 
 ## Application Structure
@@ -16,22 +15,13 @@ This is a Next.js e-commerce application built to demonstrate LaunchDarkly's fea
 2. **Product Details** - Modal/overlay showing detailed product information
 3. **Shopping Cart** - Right-side drawer showing cart items and checkout
 4. **Chatbot** - AI assistant feature (toggle icon in bottom right)
-5. **Admin Routes** - Protected routes for authenticated LaunchDarkly users only
 
 ## Architecture Patterns
-
-### Authentication
-- NextAuth.js v5 configured for Google OAuth
-- **Domain Restriction**: Only `@launchdarkly.com` emails can authenticate
-- Authentication is **optional** for public storefront access
-- Authentication is **required** for admin/protected routes
-- Session data available via `auth()` server function
-- Sign in page: `/auth/signin`
 
 ### LaunchDarkly Integration
 - **Server-side**: Use `getLDServerClient()` and `getFlagValue()` from `@/lib/launchdarkly/server`
 - **Client-side**: Wrap components with `LaunchDarklyProvider` and use `useFlag()` hook
-- User context automatically passed from NextAuth session to LaunchDarkly
+- User context managed via LoginContext for persona switching
 - Environment variables required:
   - `LAUNCHDARKLY_SDK_KEY` (server-side)
   - `NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID` (client-side)
@@ -156,12 +146,6 @@ This is a Next.js e-commerce application built to demonstrate LaunchDarkly's fea
 ## Environment Variables
 Required environment variables (stored in `.env.local`):
 ```
-# NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=<your-secret-key>
-GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
-
 # LaunchDarkly
 LAUNCHDARKLY_SDK_KEY=<your-server-sdk-key>
 NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=<your-client-id>
@@ -172,8 +156,7 @@ NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=<your-client-id>
 2. Copy `.env.example` to `.env.local` and fill in values
 3. Run `npm run dev` to start development server
 4. Access app at `http://localhost:3000`
-5. Test authentication flow (optional for public access)
-6. Verify LaunchDarkly connection (flags should load)
+5. Verify LaunchDarkly connection (flags should load)
 
 ## Best Practices
 - **Always test responsive design** on mobile, tablet, and desktop
@@ -190,8 +173,7 @@ NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=<your-client-id>
 ```typescript
 // Server component by default
 export default async function MyPage() {
-  const session = await auth()
-  // Fetch data, check permissions, etc.
+  // Fetch data, etc.
   return <div>...</div>
 }
 
@@ -201,23 +183,6 @@ export default function MyPage() {
   const [state, setState] = useState()
   // Use hooks, event handlers, etc.
   return <div>...</div>
-}
-```
-
-### Protected Route (Admin Only)
-```typescript
-import { auth } from "@/lib/auth"
-import { redirect } from "next/navigation"
-
-export default async function AdminPage() {
-  const session = await auth()
-  
-  // Check if user is authenticated and from LaunchDarkly domain
-  if (!session || !session.user?.email?.endsWith("@launchdarkly.com")) {
-    redirect("/auth/signin")
-  }
-  
-  return <div>Admin content</div>
 }
 ```
 

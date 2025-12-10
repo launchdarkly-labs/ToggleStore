@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env
 .env.local
+.env.production
 
 # vercel
 .vercel
@@ -53,3 +54,6 @@ Thumbs.db
 
 __pycache__/
 venv/
+deploy_batch.py
+deploy_batch.sh
+deploy_aws.py

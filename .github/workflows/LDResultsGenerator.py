@@ -10,6 +10,8 @@ import random
 import time
 import threading
 from datetime import datetime, timedelta
+from ldai.client import LDAIClient, AIConfig, ModelConfig, LDMessage, ProviderConfig
+from ldai.tracker import TokenUsage, FeedbackKind
 
 load_dotenv()
 
@@ -25,7 +27,7 @@ HEADERS = {
 
 # Flag keys
 PAYMENTS_FLAG_KEY = "paymentsSystemsUpgrade"
-DATABASE_FLAG_KEY = "databaseUpgrade"
+EMAIL_SERVICE_FLAG_KEY = "emailNotificationServiceUpgrade"
 SEARCH_ALGORITHM_FLAG_KEY = "searchAlgorithm"
 STORE_PROMO_FLAG_KEY = "storePromoBanner"
 AI_CONFIG_FLAG_KEY = "ai-config--togglebotchatbot"
@@ -35,10 +37,10 @@ PAYMENT_SUCCESS_RATE_KEY = "payment-success-rate"
 PAYMENT_LATENCY_KEY = "payment-latency"
 PAYMENT_ERROR_RATE_KEY = "payment-error-rate"
 
-# Database metrics
-DATABASE_ERROR_RATE_KEY = "database-error-rate"
-DATABASE_LATENCY_KEY = "database-latency"
-DATABASE_THROUGHPUT_KEY = "database-throughput"
+# Email notification service metrics
+EMAIL_ERROR_RATE_KEY = "email-error-rate"
+EMAIL_LATENCY_KEY = "email-latency"
+EMAIL_DELIVERY_RATE_KEY = "email-delivery-rate"
 
 # Search algorithm experiment metrics
 SEARCH_STARTED_KEY = "search-started"
@@ -55,6 +57,14 @@ AI_SOURCE_FIDELITY_KEY = "ai-source-fidelity"
 AI_RELEVANCE_KEY = "ai-relevance"
 AI_COST_KEY = "ai-cost"
 AI_CHATBOT_NEGATIVE_FEEDBACK_KEY = "ai-chatbot-negative-feedback"
+
+# AI Config monitoring flag key
+AI_CONFIG_MONITORING_FLAG_KEY = "ai-config--togglebotchatbot"
+
+# Shopping Assistant Agent AI Config
+SHOPPING_ASSISTANT_AGENT_FLAG_KEY = "ai-config--togglestore-shopping-assistant-agent"
+SHOPPING_AGENT_ACCURACY_KEY = "shopping-agent-accuracy"
+SHOPPING_AGENT_NEGATIVE_FEEDBACK_KEY = "shopping-agent-negative-feedback"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -219,13 +229,13 @@ def payments_systems_upgrade_generator(client, stop_event):
     
     logging.info(f"Payments Systems Upgrade generator finished. Total users: {user_counter}")
 
-def database_upgrade_generator(client, stop_event):
-    """Guarded rollout generator for database upgrade - FAILED release with rollback"""
+def email_notification_service_upgrade_generator(client, stop_event):
+    """Guarded rollout generator for email notification service upgrade - FAILED release with rollback"""
     if not client.is_initialized():
-        logging.error("LaunchDarkly client is not initialized for Database Upgrade")
+        logging.error("LaunchDarkly client is not initialized for Email Notification Service Upgrade")
         return
     
-    logging.info("Starting guarded release generator for Database Upgrade (FAILURE scenario with rollback)...")
+    logging.info("Starting guarded release generator for Email Notification Service Upgrade (FAILURE scenario with rollback)...")
     
     # Wait for rollout to be ready
     logging.info("Waiting for flag rollout to be ready...")
@@ -235,16 +245,16 @@ def database_upgrade_generator(client, stop_event):
     
     while retry_count < max_retries and not rollout_ready:
         time.sleep(5)
-        flag_details = get_flag_details(DATABASE_FLAG_KEY)
+        flag_details = get_flag_details(EMAIL_SERVICE_FLAG_KEY)
         if flag_details and is_measured_rollout(flag_details):
             rollout_ready = True
-            logging.info("✅ Database Upgrade rollout is ready!")
+            logging.info("✅ Email Notification Service Upgrade rollout is ready!")
         else:
             retry_count += 1
             logging.info(f"Rollout not ready yet, retrying... ({retry_count}/{max_retries})")
     
     if not rollout_ready:
-        logging.error("Database Upgrade rollout failed to initialize after 30 seconds. Exiting.")
+        logging.error("Email Notification Service Upgrade rollout failed to initialize after 30 seconds. Exiting.")
         return
     
     user_counter = 0
@@ -255,47 +265,46 @@ def database_upgrade_generator(client, stop_event):
     while True:
         # Check rollout status every 500 users
         if status_check_counter >= 500:
-            flag_details = get_flag_details(DATABASE_FLAG_KEY)
+            flag_details = get_flag_details(EMAIL_SERVICE_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
-                logging.info("Measured rollout is over. Exiting Database Upgrade generator.")
+                logging.info("Measured rollout is over. Exiting Email Notification Service Upgrade generator.")
                 stop_event.set()
                 break
             status_check_counter = 0
         
         try:
             user_context = generate_user_context()
-            flag_value = client.variation(DATABASE_FLAG_KEY, user_context, False)
+            flag_value = client.variation(EMAIL_SERVICE_FLAG_KEY, user_context, False)
             
             # FAILURE SCENARIO: New version (True) performs aggressively worse - triggers rollback
             if flag_value:
                 # NEW VERSION (True): Catastrophic performance - will aggressively trigger rollback
-                error_rate = 25.0  # 25% error rate (catastrophically high)
-                latency = 3500     # 3500ms latency (extremely slow)
-                throughput = 30     # 30 ops/sec (very low throughput)
+                error_rate = 25.0      # 25% error rate (catastrophically high)
+                latency = 8000         # 8000ms latency (extremely slow email sending)
+                delivery_rate = 0.60   # 60% delivery rate (very low - many emails failing)
                 
                 # Trigger alert when first user gets bad version
                 if not alert_triggered:
-                    logging.warning(f"🚨 Database rollback triggered at user {user_counter} - high error rate detected!")
+                    logging.warning(f"🚨 Email service rollback triggered at user {user_counter} - high error rate detected!")
                     alert_triggered = True
             else:
                 # LEGACY VERSION (False): Excellent baseline performance
-                error_rate = 0.2   # 0.2% error rate (very low)
-                latency = 80       # 80ms latency (fast)
-                throughput = 600   # 600 ops/sec (excellent throughput)
+                error_rate = 0.2       # 0.2% error rate (very low)
+                latency = 150          # 150ms latency (fast email sending)
+                delivery_rate = 0.995  # 99.5% delivery rate (excellent)
             
             # Track error rate
             if random.random() < (error_rate / 100):
-                client.track(DATABASE_ERROR_RATE_KEY, user_context)
+                client.track(EMAIL_ERROR_RATE_KEY, user_context)
             
             # Track latency with tight variance for consistency
-            latency_variance = 50 if flag_value else 5  # Tight variance: ±50ms for bad, ±5ms for good
+            latency_variance = 500 if flag_value else 20  # Tight variance: ±500ms for bad, ±20ms for good
             latency_value = int(latency + random.uniform(-latency_variance, latency_variance))
-            client.track(DATABASE_LATENCY_KEY, user_context, None, latency_value)
+            client.track(EMAIL_LATENCY_KEY, user_context, None, latency_value)
             
-            # Track throughput with tight variance for consistency
-            throughput_variance = 5 if flag_value else 10  # Tight variance: ±5 ops/sec for bad, ±10 ops/sec for good
-            throughput_value = int(throughput + random.uniform(-throughput_variance, throughput_variance))
-            client.track(DATABASE_THROUGHPUT_KEY, user_context, None, throughput_value)
+            # Track delivery rate (success = email delivered)
+            if random.random() < delivery_rate:
+                client.track(EMAIL_DELIVERY_RATE_KEY, user_context)
             
             user_counter += 1
             flush_counter += 1
@@ -305,16 +314,16 @@ def database_upgrade_generator(client, stop_event):
             if flush_counter >= 200:
                 client.flush()
                 flush_counter = 0
-                logging.info(f"Flushed database events (total users: {user_counter})")
+                logging.info(f"Flushed email service events (total users: {user_counter})")
                 time.sleep(0.1)  # Small delay after flush to allow connections to close
             
             time.sleep(0.02)  # 20ms delay to reduce event rate
             
         except Exception as e:
-            logging.error(f"Error generating database metrics: {str(e)}")
+            logging.error(f"Error generating email service metrics: {str(e)}")
             continue
     
-    logging.info(f"Database Upgrade generator finished. Total users: {user_counter}")
+    logging.info(f"Email Notification Service Upgrade generator finished. Total users: {user_counter}")
 
 def search_algorithm_experiment_generator(client):
     """Experiment results generator for search algorithm - featured-list variation wins"""
@@ -523,6 +532,173 @@ def ai_config_experiment_generator(client):
     client.flush()
     time.sleep(0.5)  # Wait for final flush to complete
 
+def ai_configs_monitoring_results_generator(client):
+    """Monitoring results generator for AI Configs"""
+    LD_FLAG_KEY = AI_CONFIG_MONITORING_FLAG_KEY
+    NUM_RUNS = 1000
+    
+    aiclient = LDAIClient(client)
+    
+    if not client.is_initialized():
+        logging.error("Failed to initialize LaunchDarkly client for AI Config monitoring")
+        return
+    
+    logging.info("Starting AI Configs monitoring results generation...")
+    
+    fallback_value = AIConfig(
+        enabled=True,
+        model=ModelConfig(
+            name="default-model",
+            parameters={"temperature": 0.8},
+        ),
+        messages=[LDMessage(role="system", content="")],
+        provider=ProviderConfig(name="default-provider"),
+    )
+    
+    for i in range(NUM_RUNS):
+        try:
+            context = generate_user_context()
+            config, tracker = aiclient.config(LD_FLAG_KEY, context, fallback_value)
+            
+            duration = random.randint(500, 2000)
+            time_to_first_token = random.randint(50, duration)
+            prompt_tokens = random.randint(20, 100)
+            completion_tokens = random.randint(50, 500)
+            total_tokens = prompt_tokens + completion_tokens
+            tokens = TokenUsage(prompt_tokens, completion_tokens, total_tokens)
+            feedback_kind = FeedbackKind.Positive if random.random() < 0.5 else FeedbackKind.Negative
+            
+            tracker.track_duration(duration)
+            tracker.track_tokens(tokens)
+            tracker.track_feedback({'kind': feedback_kind})
+            tracker.track_time_to_first_token(time_to_first_token)
+            
+            if random.random() < 0.95:
+                tracker.track_success()
+            else:
+                tracker.track_error()
+            
+            if (i + 1) % 100 == 0:
+                logging.info(f"Processed {i + 1} monitoring events")
+                client.flush()
+                
+        except Exception as e:
+            logging.error(f"Error processing monitoring event {i}: {str(e)}")
+            continue
+    
+    logging.info("AI Configs monitoring results generation completed")
+    # Do not flush or close client here; handled in generate_results
+
+def shopping_assistant_agent_generator(client, stop_event):
+    """Guarded rollout generator for Shopping Assistant Agent - SUCCESSFUL release"""
+    if not client.is_initialized():
+        logging.error("LaunchDarkly client is not initialized for Shopping Assistant Agent")
+        return
+    
+    logging.info("Starting guarded release generator for Shopping Assistant Agent (SUCCESS scenario)...")
+    
+    # Wait for rollout to be ready
+    logging.info("Waiting for flag rollout to be ready...")
+    max_retries = 6
+    retry_count = 0
+    rollout_ready = False
+    
+    while retry_count < max_retries and not rollout_ready:
+        time.sleep(5)
+        flag_details = get_flag_details(SHOPPING_ASSISTANT_AGENT_FLAG_KEY)
+        if flag_details and is_measured_rollout(flag_details):
+            rollout_ready = True
+            logging.info("✅ Shopping Assistant Agent rollout is ready!")
+        else:
+            retry_count += 1
+            logging.info(f"Rollout not ready yet, retrying... ({retry_count}/{max_retries})")
+    
+    if not rollout_ready:
+        logging.error("Shopping Assistant Agent rollout failed to initialize after 30 seconds. Exiting.")
+        return
+    
+    user_counter = 0
+    flush_counter = 0
+    status_check_counter = 0
+    
+    while True:
+        # Check rollout status every 500 users
+        if status_check_counter >= 500:
+            flag_details = get_flag_details(SHOPPING_ASSISTANT_AGENT_FLAG_KEY)
+            if not flag_details or not is_measured_rollout(flag_details):
+                logging.info("Measured rollout is over. Exiting Shopping Assistant Agent generator.")
+                stop_event.set()
+                break
+            status_check_counter = 0
+        
+        try:
+            user_context = generate_user_context()
+            flag_value = client.variation(SHOPPING_ASSISTANT_AGENT_FLAG_KEY, user_context, None)
+            
+            # SUCCESS SCENARIO: LD AI Model Pro (test variation/true) performs better than LD AI Model Mini (control/false)
+            # Determine which model based on variation - check multiple possible fields
+            is_pro_model = False
+            if flag_value is not None:
+                flag_str = str(flag_value).lower()
+                # Check if variation key, name, or model contains 'pro'
+                if 'pro' in flag_str:
+                    is_pro_model = True
+                elif 'mini' in flag_str:
+                    is_pro_model = False
+                else:
+                    # Try to access variation attributes if it's an object
+                    if hasattr(flag_value, 'key'):
+                        variation_key = str(flag_value.key).lower()
+                        is_pro_model = 'pro' in variation_key
+                    elif hasattr(flag_value, 'name'):
+                        variation_name = str(flag_value.name).lower()
+                        is_pro_model = 'pro' in variation_name
+                    elif isinstance(flag_value, dict):
+                        # Check dict keys
+                        if 'key' in flag_value:
+                            is_pro_model = 'pro' in str(flag_value['key']).lower()
+                        elif 'name' in flag_value:
+                            is_pro_model = 'pro' in str(flag_value['name']).lower()
+                        elif 'model' in flag_value:
+                            model_info = flag_value['model']
+                            if isinstance(model_info, dict) and 'name' in model_info:
+                                is_pro_model = 'pro' in str(model_info['name']).lower()
+            
+            if is_pro_model:
+                # PRO MODEL (True Variation/Test): Excellent performance - 90%+ accuracy, very low negative feedback
+                accuracy = random.uniform(90, 98)  # High accuracy (90-98%) - ensures 90%+ minimum
+                negative_feedback_rate = 0.015  # Very low negative feedback (1.5%)
+            else:
+                # MINI MODEL (False Variation/Control): Good baseline - 80+ but below 90%, worse negative feedback
+                accuracy = random.uniform(80, 89)  # Moderate accuracy (80-89%) - ensures 80+ but below 90%
+                negative_feedback_rate = 0.12  # Higher negative feedback (12%) - worse than pro model
+            
+            # Track accuracy (numeric metric)
+            client.track(SHOPPING_AGENT_ACCURACY_KEY, user_context, None, accuracy)
+            
+            # Track negative feedback (occurrence metric - lower is better)
+            if random.random() < negative_feedback_rate:
+                client.track(SHOPPING_AGENT_NEGATIVE_FEEDBACK_KEY, user_context)
+            
+            user_counter += 1
+            flush_counter += 1
+            status_check_counter += 1
+            
+            # Flush events every 200 users to reduce connection pool pressure
+            if flush_counter >= 200:
+                client.flush()
+                flush_counter = 0
+                logging.info(f"Flushed shopping assistant events (total users: {user_counter})")
+                time.sleep(0.1)  # Small delay after flush to allow connections to close
+            
+            time.sleep(0.02)  # 20ms delay to reduce event rate
+            
+        except Exception as e:
+            logging.error(f"Error generating shopping assistant metrics: {str(e)}")
+            continue
+    
+    logging.info(f"Shopping Assistant Agent generator finished. Total users: {user_counter}")
+
 def generate_results(project_key, api_key):
     """Main function to generate all results"""
     logging.info(f"Generating results for project {project_key}")
@@ -563,32 +739,48 @@ def generate_results(project_key, api_key):
         
         logging.info("Experiment results generation completed.")
         
+        # 2.5. Generate AI Config monitoring results
+        logging.info("=" * 60)
+        logging.info("STEP 2.5: Generating AI Config monitoring results")
+        logging.info("=" * 60)
+        
+        ai_configs_monitoring_results_generator(client)
+        
+        logging.info("AI Config monitoring results generation completed.")
+        
         # 3. Generate guarded rollout results
         logging.info("=" * 60)
         logging.info("STEP 3: Generating guarded rollout results")
         logging.info("=" * 60)
         
         payments_stop_event = threading.Event()
-        database_stop_event = threading.Event()
+        email_service_stop_event = threading.Event()
+        shopping_assistant_stop_event = threading.Event()
         
         payments_thread = threading.Thread(
             target=payments_systems_upgrade_generator,
             args=(client, payments_stop_event)
         )
-        database_thread = threading.Thread(
-            target=database_upgrade_generator,
-            args=(client, database_stop_event)
+        email_service_thread = threading.Thread(
+            target=email_notification_service_upgrade_generator,
+            args=(client, email_service_stop_event)
+        )
+        shopping_assistant_thread = threading.Thread(
+            target=shopping_assistant_agent_generator,
+            args=(client, shopping_assistant_stop_event)
         )
         
         payments_thread.start()
-        database_thread.start()
+        email_service_thread.start()
+        shopping_assistant_thread.start()
         
         logging.info("Guarded rollout generators are running...")
         logging.info("They will continue until measured rollouts complete.")
         
-        # Wait for both generators to complete
+        # Wait for all generators to complete
         payments_thread.join()
-        database_thread.join()
+        email_service_thread.join()
+        shopping_assistant_thread.join()
         
         logging.info("All guarded rollout generators have completed.")
         

@@ -62,6 +62,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: placeholder3
+                name: placeholder1
                 port:
                   number: 80

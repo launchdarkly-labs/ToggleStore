@@ -2,13 +2,13 @@
 
 import { Sheet, SheetContent, SheetHeader } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { X, QrCode } from "lucide-react"
+import { X, QrCode, Monitor, BarChart3 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { useDeveloperMode } from "@/lib/developer-mode-context"
 import { QRCodeSVG } from "qrcode.react"
-import { useState } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 interface SidebarProps {
   open: boolean
@@ -33,11 +33,7 @@ const menuItems: MenuItem[] = [
     id: "architecture",
     title: "Architecture",
     icon: "/assets/icons/stacks.svg",
-  },
-  {
-    id: "resources",
-    title: "Resources",
-    icon: "/assets/icons/developer_guide.svg",
+    href: "/architecture",
   },
 ]
 
@@ -95,6 +91,7 @@ function DeveloperToolToggle({ onClose }: { onClose: () => void }) {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const [showQRCode, setShowQRCode] = useState(false)
+  const [qrCodeSize, setQrCodeSize] = useState(500)
   const [currentUrl] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return window.location.origin + window.location.pathname
@@ -102,12 +99,66 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     return ""
   })
 
+  // Swipe gesture tracking
+  const touchStartX = useRef<number | null>(null)
+  const touchEndX = useRef<number | null>(null)
+  const minSwipeDistance = 50 // Minimum distance for a swipe to be registered
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchEndX.current = null
+    touchStartX.current = e.targetTouches[0].clientX
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!touchStartX.current || !touchEndX.current) return
+    
+    const distance = touchStartX.current - touchEndX.current
+    const isLeftSwipe = distance > minSwipeDistance
+    
+    // Swipe from right to left closes the sidebar (since it opens from left)
+    if (isLeftSwipe) {
+      onClose()
+    }
+    
+    // Reset touch positions
+    touchStartX.current = null
+    touchEndX.current = null
+  }, [onClose])
+
+  // Calculate responsive QR code size based on viewport
+  useEffect(() => {
+    const calculateQrSize = () => {
+      if (typeof window === "undefined") return
+      
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      
+      // Use 70% of the smaller dimension, with min 200px and max 500px
+      const size = Math.min(
+        Math.max(200, Math.min(viewportWidth, viewportHeight) * 0.7),
+        500
+      )
+      setQrCodeSize(size)
+    }
+
+    calculateQrSize()
+    window.addEventListener("resize", calculateQrSize)
+    return () => window.removeEventListener("resize", calculateQrSize)
+  }, [])
+
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent
         side="left"
         hideCloseButton
         className="w-full max-w-full sm:max-w-[375px] sm:w-[375px] bg-[#191919] border-r border-[#58595B] flex flex-col p-0 overflow-hidden"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         {/* Header with Logo and Close Button */}
         <SheetHeader className="relative pt-[60px] px-6 sm:px-[49px] shrink-0">
@@ -171,12 +222,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   </div>
                 </div>
 
-                {/* Content */}
+                {/* Content - matches hero section layout */}
                 <div className="absolute inset-0 flex items-center justify-center px-6 sm:px-[26px] z-10">
                   <div className="flex items-center justify-center relative">
-                    {/* Toggle text */}
-                    <span 
-                      className="text-base sm:text-lg font-bold leading-[1.2] tracking-[0.32px] shrink-0 mr-[-8px] sm:mr-[-10px] relative z-10"
+                    {/* Toggle text - styled like hero section */}
+                    <h2 
+                      className="text-xl sm:text-2xl font-bold leading-[1.2] shrink-0 mr-[-12px] sm:mr-[-16px] relative z-10 select-none"
                       style={{
                         fontFamily: "var(--font-sohne), sans-serif",
                         WebkitTextFillColor: "transparent",
@@ -186,23 +237,36 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                       }}
                     >
                       Toggle
-                    </span>
+                    </h2>
                     
-                    {/* Icon - positioned to overlap both words */}
-                    <div className="relative w-[50px] sm:w-[60px] h-[50px] sm:h-[60px] flex items-center justify-center shrink-0 z-20">
+                    {/* Mascot - with floating animation like hero section */}
+                    <motion.div 
+                      className="relative w-[55px] sm:w-[65px] h-[55px] sm:h-[65px] flex items-center justify-center shrink-0 z-20"
+                      animate={{ y: [0, -4, 0] }}
+                      transition={{
+                        duration: 5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      style={{
+                        willChange: "transform",
+                        transform: "translateZ(0)",
+                        backfaceVisibility: "hidden",
+                      }}
+                    >
                       <Image
                         src="/storefront/ToggleHomePage.png"
                         alt="Toggle Mascot"
-                        width={60}
-                        height={60}
+                        width={65}
+                        height={65}
                         className="w-full h-full object-contain"
                         priority
                       />
-                    </div>
+                    </motion.div>
                     
-                    {/* Store text */}
-                    <span 
-                      className="text-base sm:text-lg font-bold leading-[1.2] tracking-[0.48px] shrink-0 ml-[-8px] sm:ml-[-10px] relative z-10"
+                    {/* Store text - styled like hero section */}
+                    <h2 
+                      className="text-xl sm:text-2xl font-bold leading-[1.2] shrink-0 ml-[-12px] sm:ml-[-16px] relative z-10 select-none"
                       style={{
                         fontFamily: "var(--font-sohne), sans-serif",
                         WebkitTextFillColor: "transparent",
@@ -212,7 +276,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                       }}
                     >
                       Store
-                    </span>
+                    </h2>
                   </div>
                 </div>
               </Link>
@@ -317,8 +381,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 )
               })}
             </div>
-
-            
+          </div>
 
           {/* Tools Section - Hidden on mobile */}
           <div className="hidden md:block mt-8 pt-8 border-t border-[#58595B]/30 w-full">
@@ -331,6 +394,106 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
               {/* Developer Tool Toggle */}
               <DeveloperToolToggle onClose={onClose} />
+
+              {/* Screensaver Button */}
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25,
+                }}
+              >
+                <Link
+                  href="/screensaver"
+                  onClick={onClose}
+                  className="relative h-[75px] rounded-[20px] overflow-hidden group block"
+                  style={{
+                    background: "var(--Grayscale-Black-01, #282828)",
+                  }}
+                >
+                  {/* Glow effect background */}
+                  <div className="absolute left-[22.5px] top-[-214.43px] w-[calc(648.425px*0.792)] h-[calc(648.425px*0.611)] opacity-30 pointer-events-none">
+                    <div className="absolute inset-[-15.42%_-28.23%] opacity-20">
+                      <div 
+                        className="w-full h-full blur-3xl" 
+                        style={{
+                          background: "linear-gradient(to bottom right, #405BFF, #7084FF)"
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="absolute inset-0 flex items-center justify-between px-6 sm:px-[26px] z-10">
+                    <div className="flex items-center gap-6 flex-1 min-w-0">
+                      <Monitor size={24} className="text-[#7084FF] shrink-0" />
+                      <p className="text-white text-base font-bold leading-[1.3] truncate">
+                        Screensaver
+                      </p>
+                    </div>
+                    <div className="w-[17px] h-[21px] relative shrink-0">
+                      <Image
+                        src="/assets/icons/carrot_forward.svg"
+                        alt="Arrow"
+                        width={17}
+                        height={21}
+                        className="w-full h-full object-contain brightness-0 invert"
+                      />
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
+
+              {/* Results Generator Button */}
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25,
+                }}
+              >
+                <Link
+                  href="/results-generator"
+                  onClick={onClose}
+                  className="relative h-[75px] rounded-[20px] overflow-hidden group block"
+                  style={{
+                    background: "var(--Grayscale-Black-01, #282828)",
+                  }}
+                >
+                  {/* Glow effect background */}
+                  <div className="absolute left-[22.5px] top-[-214.43px] w-[calc(648.425px*0.792)] h-[calc(648.425px*0.611)] opacity-30 pointer-events-none">
+                    <div className="absolute inset-[-15.42%_-28.23%] opacity-20">
+                      <div 
+                        className="w-full h-full blur-3xl" 
+                        style={{
+                          background: "linear-gradient(to bottom right, #405BFF, #7084FF)"
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="absolute inset-0 flex items-center justify-between px-6 sm:px-[26px] z-10">
+                    <div className="flex items-center gap-6 flex-1 min-w-0">
+                      <BarChart3 size={24} className="text-[#7084FF] shrink-0" />
+                      <p className="text-white text-base font-bold leading-[1.3] truncate">
+                        Results Generator
+                      </p>
+                    </div>
+                    <div className="w-[17px] h-[21px] relative shrink-0">
+                      <Image
+                        src="/assets/icons/carrot_forward.svg"
+                        alt="Arrow"
+                        width={17}
+                        height={21}
+                        className="w-full h-full object-contain brightness-0 invert"
+                      />
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
             </div>
           </div>
 
@@ -350,7 +513,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 <Button
                   variant="default"
                   className="rounded-[60px] px-6 md:px-[37.8px] py-[29px] whitespace-nowrap text-xl md:text-xl z-10 text-white category-button-selected w-full"
-                  onClick={() => window.open("https://launchdarkly.com/request-a-demo/", "_blank")}
+                  onClick={() => window.open("https://launchdarkly.com/event-follow-up/?utm_source=event&utm_medium=meetingrequested&utm_campaign=pltf&utm_term=awsreinv25", "_blank")}
                 >
                   Book Meeting
                 </Button>
@@ -404,6 +567,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             </div>
           </div>
         </div>
+
+        {/* Footer with Developer Credits */}
+        <div className="shrink-0 px-6 sm:px-[26.5px] pb-4 sm:pb-4 pt-4 border-t border-[#58595B]/30">
+          <Link
+            href="https://www.ahmedqadri.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#A7A9AC] text-xs hover:text-[#7084FF] underline hover:no-underline transition-colors inline-block"
+          >
+            Coded by AQ
+          </Link>
         </div>
       </SheetContent>
 
@@ -428,19 +602,19 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </button>
           
           {/* QR Code Content */}
-          <div className="flex flex-col items-center gap-8 sm:gap-10 w-full max-w-4xl px-4">
-            <p className="text-white text-xl sm:text-2xl md:text-3xl font-bold text-center">
+          <div className="flex flex-col items-center gap-4 sm:gap-6 md:gap-10 w-full max-w-4xl px-4">
+            <p className="text-white text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-center">
               Scan to open on your mobile device
             </p>
-            <div className="bg-white p-8 sm:p-12 md:p-16 rounded-[30px] flex items-center justify-center shadow-2xl">
+            <div className="bg-white p-4 sm:p-6 md:p-12 lg:p-16 rounded-[20px] sm:rounded-[30px] flex items-center justify-center shadow-2xl">
               <QRCodeSVG
                 value={currentUrl}
-                size={500}
+                size={qrCodeSize}
                 level="M"
                 includeMargin={false}
               />
             </div>
-            <p className="text-[#A7A9AC] text-base sm:text-lg md:text-xl text-center break-all max-w-full px-4">
+            <p className="text-[#A7A9AC] text-sm sm:text-base md:text-lg lg:text-xl text-center break-all max-w-full px-4">
               {currentUrl}
             </p>
           </div>

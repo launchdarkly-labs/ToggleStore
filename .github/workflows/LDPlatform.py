@@ -342,12 +342,32 @@ class LDPlatform:
             "LD-API-Version": "beta",
         }
 
-        response = self.getrequest(
-            "POST",
-            "https://app.launchdarkly.com/api/v2/projects/" + self.project_key + "/ai-configs/" + ai_config_key + "/variations",
-            json=payload,
-            headers=headers,
-        )
+        # Retry logic for internal server errors (500/503) due to too many concurrent requests
+        max_retries = 5
+        retry_count = 0
+        base_delay = 1  # Start with 1 second delay
+        
+        while retry_count <= max_retries:
+            response = self.getrequest(
+                "POST",
+                "https://app.launchdarkly.com/api/v2/projects/" + self.project_key + "/ai-configs/" + ai_config_key + "/variations",
+                json=payload,
+                headers=headers,
+            )
+            
+            # If successful or not an internal error, break the retry loop
+            if response.status_code not in [500, 503]:
+                break
+            
+            # If it's an internal error and we haven't exceeded max retries, retry with exponential backoff
+            if retry_count < max_retries:
+                delay = base_delay * (2 ** retry_count)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                print(f"Internal server error (HTTP {response.status_code}) creating AI config version. Retrying in {delay}s (attempt {retry_count + 1}/{max_retries})...")
+                time.sleep(delay)
+                retry_count += 1
+            else:
+                print(f"Max retries ({max_retries}) exceeded for creating AI config version")
+                break
         
         # Add better error handling for JSON parsing
         if response.text.strip():  # Only try to parse if response is not empty
@@ -588,6 +608,101 @@ class LDPlatform:
         data = json.loads(response.text)
         if "message" in data:
             print("Error creating segment: " + data["message"])
+        return response
+
+    ##################################################
+    # Create AI Fallback Segment
+    # Creates a segment for ai.fallback = true context
+    ##################################################
+    
+    def create_ai_fallback_segment(self, env_key):
+        """
+        Create a segment for AI contexts with fallback = true
+        This is used for self-healing AI to target the fallback model variation
+        """
+        segment_key = "ai-fallback"
+        segment_name = "AI Fallback"
+        description = "Segment for AI contexts with fallback enabled - used for self-healing AI model switching"
+        
+        # Create the segment
+        res = self.create_segment(segment_key, segment_name, env_key, description)
+        
+        # Add rule for ai.fallback = true
+        res = self.add_segment_rule(
+            segment_key,
+            env_key,
+            "ai",  # context kind
+            "fallback",  # attribute
+            "in",  # operation
+            [True]  # value
+        )
+        
+        return res
+    
+    ##################################################
+    # Add AI Fallback Segment to AI Config
+    # Targets the fallback variation when ai.fallback = true
+    ##################################################
+    
+    def add_ai_fallback_targeting_to_ai_config(self, ai_config_key, env_key, fallback_variation_key):
+        """
+        Add targeting rule to AI config that serves the fallback variation
+        when ai.fallback = true (via ai-fallback segment)
+        """
+        # Get the variation ID for the fallback variation
+        variation_id = self.get_ai_config_variation_id(ai_config_key, fallback_variation_key)
+        
+        if not variation_id:
+            print(f"Error: Could not find variation '{fallback_variation_key}' for AI config '{ai_config_key}'")
+            return None
+        
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/ai-configs/"
+            + ai_config_key
+            + "/targeting"
+        )
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+        
+        # Add rule that targets ai-fallback segment with the fallback variation
+        payload = {
+            "environmentKey": env_key,
+            "instructions": [
+                {
+                    "kind": "addRule",
+                    "variationId": variation_id,
+                    "clauses": [
+                        {
+                            "contextKind": "",
+                            "attribute": "segmentMatch",
+                            "op": "segmentMatch",
+                            "negate": False,
+                            "values": ["ai-fallback"]
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        response = self.getrequest("PATCH", url, headers=headers, json=payload)
+        
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print("Error adding AI fallback targeting: " + data["message"])
+                else:
+                    print(f"Successfully added AI fallback targeting to {ai_config_key}")
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+                print(f"Response status: {response.status_code}")
+        
         return response
 
     ##################################################

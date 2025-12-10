@@ -4,7 +4,6 @@ import { LaunchDarklyProvider } from "@/lib/launchdarkly/client"
 import { LoginProvider } from "@/lib/login-context"
 import { ToastProvider } from "@/lib/toast"
 import { DeveloperModeProvider } from "@/lib/developer-mode-context"
-import { auth } from "@/lib/auth"
 import "./globals.css"
 
 // Sohne font family
@@ -51,7 +50,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
+    title: "ToggleStore",
   },
+  manifest: "/manifest.json",
 }
 
 export const viewport: Viewport = {
@@ -66,19 +67,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const session = await auth()
-  const user = session?.user
-    ? {
-        key: session.user.id || session.user.email || "anonymous",
-        email: session.user.email || undefined,
-        name: session.user.name || undefined,
-      }
-    : undefined
-
   return (
     <html lang="en" className={`dark ${sohne.variable} ${sohneMono.variable}`}>
       <body className="font-sans antialiased min-h-dvh">
-        <LaunchDarklyProvider user={user}>
+        <LaunchDarklyProvider>
           <LoginProvider>
             <DeveloperModeProvider>
               <ToastProvider>{children}</ToastProvider>
