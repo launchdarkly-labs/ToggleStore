@@ -74,20 +74,20 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to Amazon ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: togglestore
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }} .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
+      # - name: Build, tag, and push image to Amazon ECR
+      #   env:
+      #     ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      #     ECR_REPOSITORY: togglestore
+      #   run: |
+      #     docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }} .
+      #     docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
 
-      - name: Update K8s Deploy File
-        run: python ./.github/workflows/update_k8s_deploy_file.py
-        env:
-          NAMESPACE: ${{ env.DEMO_NAMESPACE }}
-          URL: ${{ env.DEMO_NAMESPACE }}.launchdarklydemos.com
-          IMAGE: ${{ steps.login-ecr.outputs.registry }}/togglestore:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
+      # - name: Update K8s Deploy File
+      #   run: python ./.github/workflows/update_k8s_deploy_file.py
+      #   env:
+      #     NAMESPACE: ${{ env.DEMO_NAMESPACE }}
+      #     URL: ${{ env.DEMO_NAMESPACE }}.launchdarklydemos.com
+      #     IMAGE: ${{ steps.login-ecr.outputs.registry }}/togglestore:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
 
       - name: Check Namespace in Kubernetes
         uses: kodermax/kubectl-aws-eks@master
