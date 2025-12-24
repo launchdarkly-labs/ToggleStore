@@ -46,6 +46,17 @@ ToggleStore is a Next.js application that simulates a real-world online store se
    - `LAUNCHDARKLY_SDK_KEY` (server-side)
    - `NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID` (client-side)
 
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LAUNCHDARKLY_SDK_KEY` | Yes | Server-side SDK key |
+| `NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID` | Yes | Client-side SDK key |
+| `OPENAI_API_KEY` | Optional | For OpenAI-based chatbot models |
+| `AWS_REGION` | Optional | AWS region for Bedrock (default: `us-west-2`) |
+
+**Note**: AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) are **not required** in production. The application uses EKS Pod Identity for AWS access. For local development, configure AWS credentials via `~/.aws/credentials` or environment variables.
+
 ## Feature Flags
 
 ToggleStore includes 10 active feature flags demonstrating various LaunchDarkly capabilities:
@@ -145,7 +156,54 @@ curl http://localhost:3000/api/generate-results
 
 ## Deployment
 
-### Vercel (Recommended)
+### AWS EKS (Production)
+
+ToggleStore is deployed to AWS EKS using EKS Pod Identity for secure AWS access. This eliminates the need for long-lived AWS credentials in the application.
+
+#### Prerequisites
+
+- AWS CLI configured with appropriate permissions
+- kubectl configured for your EKS cluster
+- Docker for building images
+
+#### Deployment Script
+
+Deploy using the local deployment script:
+
+```bash
+python3 .github/workflows/deploy_aws.py --namespace <your-namespace> \
+  --ld-email <your-ld-email>
+```
+
+Options:
+- `--namespace` (required): Deployment namespace (e.g., `demo`, `staging`)
+- `--skip-ld`: Skip LaunchDarkly project setup
+- `--skip-dns`: Skip Route53 DNS configuration
+- `--skip-pod-identity`: Skip EKS Pod Identity Association setup
+- `--kubeconfig`: Path to kubeconfig file
+
+#### GitHub Actions
+
+The `Cloud Environment Deployment` workflow automatically:
+1. Creates/updates LaunchDarkly project
+2. Builds and pushes Docker image to ECR
+3. Creates EKS Pod Identity Association
+4. Deploys to Kubernetes
+5. Configures Route53 DNS
+
+#### AWS Access (Pod Identity)
+
+The application uses **EKS Pod Identity** for AWS access instead of static credentials:
+- No `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` in the deployed application
+- Pods automatically receive temporary credentials from the IAM role
+- Credentials are automatically rotated
+
+For local development, the AWS SDK uses the standard credential provider chain:
+- `~/.aws/credentials` file
+- Environment variables
+- AWS SSO profiles
+
+### Vercel
 
 1. Push code to GitHub
 2. Import project in Vercel
