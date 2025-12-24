@@ -100,14 +100,13 @@ function extractSystemMessages(
  */
 export async function POST(request: NextRequest) {
   // Initialize Bedrock client
+  // Note: Credentials are NOT explicitly set - the AWS SDK uses its default credential provider chain
+  // In EKS, this automatically uses Pod Identity to get temporary credentials from the IAM role
   const region =
     process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? "us-west-2"
   const bedrockClient = new BedrockRuntimeClient({
     region,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? "",
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? "",
-    },
+    // Credentials are automatically provided by EKS Pod Identity or local AWS config
   })
 
   try {
