@@ -67,7 +67,7 @@ const INITIAL_MESSAGE: Message = {
 const SELF_HEALING_INITIAL_MESSAGE: Message = {
   id: "welcome-self-heal",
   role: "assistant",
-  content: "Hi! I'm ToggleBot with Self-Healing capabilities. I use AI judges to evaluate response quality and automatically switch to a better model if needed. Try asking me something!",
+  content: "Hi! I'm ToggleBot. How can I help you today?",
 }
 
 export function ChatBot({ 
@@ -151,6 +151,11 @@ export function ChatBot({
     product: Product
     selectedSize?: string
   }>>([])
+  
+  // Toggle for enabling/disabling fallback in self-healing mode
+  // When false, shows only the bad response without self-healing
+  const [enableFallback, setEnableFallback] = useState(true)
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false)
 
   const scrollToBottom = useCallback(() => {
     if (activeTab === "experiment") {
@@ -679,6 +684,7 @@ export function ChatBot({
           userInput: userMessage.content,
           chatHistory,
           aiConfigKey: selfHealingAiConfigKey,
+          enableFallback, // Pass the toggle state to control whether fallback runs
         }),
       })
 
@@ -771,6 +777,17 @@ export function ChatBot({
                         }
                         setSelfHealingMessages((prev) => [...prev, resetPrompt])
                       }, 1000)
+                    }
+                    
+                    // Show judge message when fallback was skipped (bad response only mode)
+                    if (data.fallbackSkipped && data.judgeScores) {
+                      const judgeMessage: Message = {
+                        id: Date.now().toString() + "-judge",
+                        role: "judge",
+                        content: `🔍 **AI Judge Evaluation**\n\n**Model Scores (${data.modelName || "Unknown Model"}):**\n- Accuracy: ${data.judgeScores.before?.accuracy?.toFixed(1) || "N/A"}%\n- Relevance: ${data.judgeScores.before?.relevance?.toFixed(1) || "N/A"}%\n\n⚠️ **Scores below threshold (90%)** - Self-healing is disabled.\n\n💡 Enable fallback in Options to see the self-healing behavior.`,
+                        judgeScores: data.judgeScores,
+                      }
+                      setSelfHealingMessages((prev) => [...prev, judgeMessage])
                     }
                     
                     // Handle products
@@ -1089,26 +1106,78 @@ export function ChatBot({
             )}
             
             {/* Metrics Display - Self-Healing Tab */}
-            {activeTab === "self-healing" && isSelfHealingEnabled && (selfHealingFlag?.model?.name || selfHealingMetrics) && (
+            {activeTab === "self-healing" && isSelfHealingEnabled && (
               <div className="px-[32px] md:px-[40px] lg:px-[48px] pb-[12px] md:pb-[16px] lg:pb-[20px] border-t border-[#58595B]/30">
                 <div className="flex flex-col gap-2 md:gap-3 lg:gap-4 pt-[8px] md:pt-[10px] lg:pt-[12px]">
-                  <div className="flex items-center gap-3 md:gap-4 lg:gap-5 flex-wrap">
-                    {(selfHealingMetrics?.modelName || selfHealingFlag?.model?.name) && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                          Model:
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3 md:gap-4 lg:gap-5 flex-wrap">
+                      {(selfHealingMetrics?.modelName || selfHealingFlag?.model?.name) && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
+                            Model:
+                          </span>
+                          <span className="text-[14px] md:text-[16px] lg:text-[18px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
+                            {selfHealingMetrics?.modelName || selfHealingFlag?.model?.name}
+                          </span>
+                        </div>
+                      )}
+                      {selfHealingMetrics?.didFallback && (
+                        <span className="px-2 py-1 bg-[#ebff38]/20 text-[#ebff38] font-sohne text-[14px] md:text-[20px] rounded-full">
+                          Self-Healed ✅
                         </span>
-                        <span className="text-[14px] md:text-[16px] lg:text-[18px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                          {selfHealingMetrics?.modelName || selfHealingFlag?.model?.name}
-                        </span>
-                      </div>
-                    )}
-                    {selfHealingMetrics?.didFallback && (
-                      <span className="px-2 py-1 bg-[#ebff38]/20 text-[#ebff38] font-sohne text-[14px] md:text-[20px] rounded-full">
-                        Self-Healed ✅
-                      </span>
-                    )}
+                      )}
+                    </div>
+                    
+                    {/* Settings Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+                        className="flex items-center gap-1 px-2 py-1 text-[12px] md:text-[14px] text-[#A7A9AC] hover:text-white transition-colors rounded border border-[#58595B] hover:border-[#7084FF]"
+                        aria-label="Settings"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="3"/>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        <span className="hidden sm:inline">Options</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showSettingsDropdown ? 'rotate-180' : ''}`}>
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </button>
+                      
+                      {showSettingsDropdown && (
+                        <div className="absolute right-0 top-full mt-1 w-[220px] bg-[#212121] border border-[#58595B] rounded-lg shadow-lg z-50 overflow-hidden">
+                          <div className="p-3 border-b border-[#58595B]/50">
+                            <span className="text-[12px] text-[#A7A9AC] uppercase tracking-wider">Demo Mode</span>
+                          </div>
+                          <div className="p-2">
+                            <button
+                              onClick={() => {
+                                setEnableFallback(!enableFallback)
+                                setShowSettingsDropdown(false)
+                              }}
+                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#333] rounded transition-colors"
+                            >
+                              <div className="flex flex-col items-start">
+                                <span className="text-[14px] text-white">Enable Fallback</span>
+                                <span className="text-[11px] text-[#A7A9AC]">
+                                  {enableFallback ? "Shows self-healing" : "Bad response only"}
+                                </span>
+                              </div>
+                              <div 
+                                className={`w-10 h-5 rounded-full transition-colors relative ${enableFallback ? 'bg-[#ebff38]' : 'bg-[#58595B]'}`}
+                              >
+                                <div 
+                                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enableFallback ? 'translate-x-5' : 'translate-x-0.5'}`}
+                                />
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  
                   {selfHealingMetrics && (
                     <div className="flex items-center gap-6 md:gap-8 lg:gap-10 flex-wrap">
                       {selfHealingMetrics.timing?.totalTime !== undefined && (
@@ -1470,6 +1539,7 @@ export function ChatBot({
                                     userInput: prompt,
                                     chatHistory,
                                     aiConfigKey: selfHealingAiConfigKey,
+                                    enableFallback, // Pass the toggle state
                                   }),
                                 })
 
@@ -1538,6 +1608,17 @@ export function ChatBot({
                                                 }
                                                 setSelfHealingMessages((prev) => [...prev, resetPrompt])
                                               }, 1000)
+                                            }
+                                            
+                                            // Show judge message when fallback was skipped (bad response only mode)
+                                            if (data.fallbackSkipped && data.judgeScores) {
+                                              const judgeMessage: Message = {
+                                                id: Date.now().toString() + "-judge",
+                                                role: "judge",
+                                                content: `🔍 **AI Judge Evaluation**\n\n**Model Scores (${data.modelName || "Unknown Model"}):**\n- Accuracy: ${data.judgeScores.before?.accuracy?.toFixed(1) || "N/A"}%\n- Relevance: ${data.judgeScores.before?.relevance?.toFixed(1) || "N/A"}%\n\n⚠️ **Scores below threshold (90%)** - Self-healing is disabled.\n\n💡 Enable fallback in Options to see the self-healing behavior.`,
+                                                judgeScores: data.judgeScores,
+                                              }
+                                              setSelfHealingMessages((prev) => [...prev, judgeMessage])
                                             }
                                             setIsLoading(false)
                                             return

@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   productionBrowserSourceMaps: true,
+  // Allow togglestore.app hostname for local development
+  allowedDevOrigins: ["http://togglestore.app:3000"],
   // Turbopack configuration (Next.js 16+ default bundler)
   turbopack: {
     // Resolve aliases for Node.js modules that should be excluded from client bundle
