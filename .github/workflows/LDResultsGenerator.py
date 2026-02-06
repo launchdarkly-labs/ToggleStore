@@ -562,7 +562,7 @@ def ai_configs_monitoring_results_generator(client):
             
             tracker.track_duration(duration)
             tracker.track_tokens(tokens)
-            tracker.track_feedback({'kind': feedback_kind})
+            tracker.track_feedback(feedback_kind)
             tracker.track_time_to_first_token(time_to_first_token)
             
             if random.random() < 0.95:
