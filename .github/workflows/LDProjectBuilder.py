@@ -52,14 +52,22 @@ class ToggleStoreBuilder:
         # Add any other required variables here
         
         # Run LDResultsGenerator.py after project setup is complete
-        print("Starting results generator...")
-        proc = subprocess.Popen([
-            "python3", os.path.join(os.path.dirname(__file__), "LDResultsGenerator.py")
-        ], env=env)
+        print("Starting results generator...", flush=True)
+        proc = subprocess.Popen(
+            ["python3", "-u", os.path.join(os.path.dirname(__file__), "LDResultsGenerator.py")],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
         
-        print("Waiting for results generator to complete...")
+        # Stream output in real-time for GitHub Actions visibility
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+        
         proc.wait()
-        print("Results generator completed.")
+        print("Results generator completed.", flush=True)
         
 ############################################################################################################
    
