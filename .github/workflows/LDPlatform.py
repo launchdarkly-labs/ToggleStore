@@ -1096,7 +1096,8 @@ class LDPlatform:
     ##################################################
     def create_release_pipeline(self, pipeline_key, pipeline_name):
         if self.release_pipeline_exists(pipeline_key):
-            return
+            print(f"Release pipeline '{pipeline_key}' already exists, skipping creation")
+            return True
 
         payload = {
             "description": "Standard pipeline to roll out to production",
@@ -1151,24 +1152,42 @@ class LDPlatform:
             "Authorization": self.api_key,
             "LD-API-Version": "beta",
         }
-        response = self.getrequest(
-            "POST",
-            "https://app.launchdarkly.com/api/v2/projects/"
-            + self.project_key
-            + "/release-pipelines",
-            json=payload,
-            headers=headers,
-        )
-        if response.text:
-            try:
-                data = json.loads(response.text)
-                if "message" in data:
-                    print("Error creating release pipeline: " + data["message"])
-            except json.JSONDecodeError:
-                print(f"Warning: Could not parse release pipeline response (status {response.status_code})")
-        else:
-            print(f"Release pipeline request returned status {response.status_code} with empty body")
-        return response
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = self.getrequest(
+                "POST",
+                "https://app.launchdarkly.com/api/v2/projects/"
+                + self.project_key
+                + "/release-pipelines",
+                json=payload,
+                headers=headers,
+            )
+
+            if response.status_code in (200, 201):
+                print(f"Release pipeline '{pipeline_key}' created successfully")
+                return True
+
+            if response.status_code == 409:
+                print(f"Release pipeline '{pipeline_key}' already exists (409 conflict)")
+                return True
+
+            print(f"Release pipeline creation attempt {attempt + 1}/{max_retries} returned status {response.status_code}")
+            if response.text:
+                try:
+                    data = json.loads(response.text)
+                    if "message" in data:
+                        print(f"  API message: {data['message']}")
+                except json.JSONDecodeError:
+                    print(f"  Response body: {response.text[:200]}")
+
+            if attempt < max_retries - 1:
+                wait_time = 5 * (attempt + 1)
+                print(f"  Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+
+        print(f"Failed to create release pipeline '{pipeline_key}' after {max_retries} attempts")
+        return False
 
     def create_shortcut(self, name, key, icon, tags, env_key, sort_by="name"):
         payload = {
@@ -2072,14 +2091,28 @@ class LDPlatform:
                 "LD-API-Version": "beta",
             },
         )
-        data = json.loads(res.text)
+
+        if res.status_code != 200 or not res.text:
+            print(f"Warning: Could not fetch release pipeline '{pipeline_key}' (status {res.status_code})")
+            return {}
+
+        try:
+            data = json.loads(res.text)
+        except json.JSONDecodeError:
+            print(f"Warning: Invalid JSON response for release pipeline '{pipeline_key}'")
+            return {}
+
+        if "phases" not in data:
+            print(f"Warning: No phases found in release pipeline '{pipeline_key}'")
+            return {}
+
         c = 0
         phases = ["test", "guard", "ga"]
         phase_ids = {}
         for p in data["phases"]:
-            id = p["id"]
-            phase_ids.update({phases[c]: id})
-            c += 1
+            if c < len(phases):
+                phase_ids.update({phases[c]: p["id"]})
+                c += 1
         return phase_ids
 
     ##################################################
