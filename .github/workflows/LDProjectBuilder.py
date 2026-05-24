@@ -1644,10 +1644,13 @@ class ToggleStoreBuilder:
         
     def rp_togglestore_release_pipeline(self):
         # Create the release pipeline
-        res = self.ldproject.create_release_pipeline(
+        success = self.ldproject.create_release_pipeline(
             "togglestore-v2-q1-2026", "ToggleStore 2.0 Release - Q1 2026"
         )
         self.phase_ids = self.ldproject.get_pipeline_phase_ids("togglestore-v2-q1-2026")
+        if not self.phase_ids:
+            print("Warning: Could not get pipeline phase IDs, skipping release pipeline flag assignments")
+            return
         
         # Test Phase Flags (Flags 1-7)
         self.rp_enhanced_product_recommendations_pipeline()
