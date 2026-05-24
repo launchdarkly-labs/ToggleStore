@@ -1159,9 +1159,15 @@ class LDPlatform:
             json=payload,
             headers=headers,
         )
-        data = json.loads(response.text)
-        if "message" in data:
-            print("Error creating release pipeline: " + data["message"])
+        if response.text:
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print("Error creating release pipeline: " + data["message"])
+            except json.JSONDecodeError:
+                print(f"Warning: Could not parse release pipeline response (status {response.status_code})")
+        else:
+            print(f"Release pipeline request returned status {response.status_code} with empty body")
         return response
 
     def create_shortcut(self, name, key, icon, tags, env_key, sort_by="name"):
@@ -1391,7 +1397,7 @@ class LDPlatform:
         url = (
             "https://app.launchdarkly.com/api/v2/projects/"
             + self.project_key
-            + "/release-pipelines"
+            + "/release-pipelines/"
             + pipeline_key
         )
         res = self.getrequest(
