@@ -1094,101 +1094,6 @@ class LDPlatform:
     ##################################################
     # Create a release pipeline
     ##################################################
-    def create_release_pipeline(self, pipeline_key, pipeline_name):
-        if self.release_pipeline_exists(pipeline_key):
-            print(f"Release pipeline '{pipeline_key}' already exists, skipping creation")
-            return True
-
-        payload = {
-            "description": "Standard pipeline to roll out to production",
-            "key": pipeline_key,
-            "name": pipeline_name,
-            "phases": [
-                {
-                    "audiences": [
-                        {
-                            "environmentKey": "test",
-                            "name": "everyone",
-                            "configuration": {
-                                "releaseStrategy": "immediate-rollout",
-                                "requireApproval": False,
-                            },
-                        }
-                    ],
-                    "name": "Testing Phase",
-                },
-                {
-                    "audiences": [
-                        {
-                            "environmentKey": "production",
-                            "name": "everyone",
-                            "configuration": {
-                                "releaseStrategy": "immediate-rollout",
-                                "requireApproval": False,
-                            },
-                        }
-                    ],
-                    "name": "QA Phase",
-                },
-                {
-                    "audiences": [
-                        {
-                            "environmentKey": "production",
-                            "name": "everyone",
-                            "configuration": {
-                                "releaseStrategy": "immediate-rollout",
-                                "requireApproval": False,
-                            },
-                        }
-                    ],
-                    "name": "GA",
-                },
-            ],
-            "isProjectDefault": True,
-        }
-
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": self.api_key,
-            "LD-API-Version": "beta",
-        }
-
-        max_retries = 3
-        for attempt in range(max_retries):
-            response = self.getrequest(
-                "POST",
-                "https://app.launchdarkly.com/api/v2/projects/"
-                + self.project_key
-                + "/release-pipelines",
-                json=payload,
-                headers=headers,
-            )
-
-            if response.status_code in (200, 201):
-                print(f"Release pipeline '{pipeline_key}' created successfully")
-                return True
-
-            if response.status_code == 409:
-                print(f"Release pipeline '{pipeline_key}' already exists (409 conflict)")
-                return True
-
-            print(f"Release pipeline creation attempt {attempt + 1}/{max_retries} returned status {response.status_code}")
-            if response.text:
-                try:
-                    data = json.loads(response.text)
-                    if "message" in data:
-                        print(f"  API message: {data['message']}")
-                except json.JSONDecodeError:
-                    print(f"  Response body: {response.text[:200]}")
-
-            if attempt < max_retries - 1:
-                wait_time = 5 * (attempt + 1)
-                print(f"  Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-
-        print(f"Failed to create release pipeline '{pipeline_key}' after {max_retries} attempts")
-        return False
-
     def create_shortcut(self, name, key, icon, tags, env_key, sort_by="name"):
         payload = {
             "name": name,
@@ -1412,26 +1317,6 @@ class LDPlatform:
     ##################################################
     # Check if a release pipeline exists
     ##################################################
-    def release_pipeline_exists(self, pipeline_key):
-        url = (
-            "https://app.launchdarkly.com/api/v2/projects/"
-            + self.project_key
-            + "/release-pipelines/"
-            + pipeline_key
-        )
-        res = self.getrequest(
-            "GET",
-            url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": self.api_key,
-                "LD-API-Version": "beta",
-            },
-        )
-        if res.status_code == 404:
-            return False
-        return True
-
     ##################################################
     # Build a treatment object
     ##################################################
@@ -2042,80 +1927,6 @@ class LDPlatform:
         return res
 
     ##################################################
-    # Add a flag to a pipeline
-    ##################################################
-    def add_pipeline_flag(self, flag_key, pipeline_key):
-        var_ids = self.get_flag_variations(flag_key)
-        if not var_ids:
-            print(f"Warning: No variations found for flag {flag_key}, skipping pipeline addition")
-            return None
-        var_id = var_ids[0]
-        url = (
-            "https://app.launchdarkly.com/api/v2/projects/"
-            + self.project_key
-            + "/flags/"
-            + flag_key
-            + "/release"
-        )
-
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": self.api_key,
-            "LD-API-Version": "beta",
-        }
-
-        payload = {
-            "releaseVariationId": var_id,
-            "releasePipelineKey": pipeline_key,
-        }
-
-        response = requests.put(url, json=payload, headers=headers)
-        return response
-
-    ##################################################
-    # Get pipeline phase IDs
-    ##################################################
-    def get_pipeline_phase_ids(self, pipeline_key):
-        url = (
-            "https://app.launchdarkly.com/api/v2/projects/"
-            + self.project_key
-            + "/release-pipelines/"
-            + pipeline_key
-        )
-        res = self.getrequest(
-            "GET",
-            url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": self.api_key,
-                "LD-API-Version": "beta",
-            },
-        )
-
-        if res.status_code != 200 or not res.text:
-            print(f"Warning: Could not fetch release pipeline '{pipeline_key}' (status {res.status_code})")
-            return {}
-
-        try:
-            data = json.loads(res.text)
-        except json.JSONDecodeError:
-            print(f"Warning: Invalid JSON response for release pipeline '{pipeline_key}'")
-            return {}
-
-        if "phases" not in data:
-            print(f"Warning: No phases found in release pipeline '{pipeline_key}'")
-            return {}
-
-        c = 0
-        phases = ["test", "guard", "ga"]
-        phase_ids = {}
-        for p in data["phases"]:
-            if c < len(phases):
-                phase_ids.update({phases[c]: p["id"]})
-                c += 1
-        return phase_ids
-
-    ##################################################
     # Attach a metric to a flag
     ##################################################
     def attach_metric_to_flag(self, flag_key, metric_keys=[]):
@@ -2138,59 +1949,6 @@ class LDPlatform:
         response = requests.put(url, json=payload, headers=headers)
         return response
 
-    ##################################################
-    # Advance a flag to the next phase
-    ##################################################
-    def advance_flag_phase(self, flag_key, status, pipeline_phase_id, guarded=False):
-        counter = 0
-        status_code = 0
-        payload = {}
-        while status_code != 200:
-            counter += 1
-            url = (
-                "https://app.launchdarkly.com/api/v2/projects/"
-                + self.project_key
-                + "/flags/"
-                + flag_key
-                + "/release/phases/"
-                + pipeline_phase_id
-            )
-            
-            if guarded == True:
-                payload = {
-                    "status": status,
-                    "audiences": [
-						{
-							"audienceId": str(uuid.uuid4()),
-							"releaseGuardianConfiguration": {
-								"randomizationUnit": "user"
-							}
-						}
-					]
-                }
-                
-            else:
-                payload = {
-                    "status": status,
-                }
-    
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": self.api_key,
-                "LD-API-Version": "beta",
-            }
-
-            response = requests.put(url, json=payload, headers=headers)
-            status_code = response.status_code
-            if counter > 8:
-                break
-            if status_code != 200:
-                data = json.loads(response.text)
-                print("Error advancing flag phase: " + data["message"])
-                time.sleep(3)
-
-        return response
-    
     ##################################################
     # Update AI Config Targeting
     ##################################################
