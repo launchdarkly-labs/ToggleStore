@@ -288,14 +288,16 @@ class LDPlatform:
     # Create AI Config
     ##################################################
     
-    def create_ai_config(self, config_key, config_name, description, tags):
-        
+    def create_ai_config(self, config_key, config_name, description, tags, mode=None):
+
         payload = {
             "description": description,
             "key": config_key,
             "name": config_name,
             "tags": tags
         }
+        if mode:
+            payload["mode"] = mode
         
         headers = {
             "Content-Type": "application/json",
@@ -322,19 +324,25 @@ class LDPlatform:
     # Create AI Config Versions
     ##################################################
         
-    def create_ai_config_versions(self, ai_config_key, ai_config_version_key, ai_model_config_key, ai_config_version_name, model, messages, custom=None):
+    def create_ai_config_versions(self, ai_config_key, ai_config_version_key, ai_model_config_key, ai_config_version_name, model, messages=None, custom=None, instructions=None, description=None):
         
         payload = {
             "key": ai_config_version_key,
             "name": ai_config_version_name,
-            "messages": messages,  # Used for AI config versions
             "model": model,
             "modelConfigKey": ai_model_config_key,
             "tools": [],
             "toolKeys": []
         }
+        if instructions is not None:
+            payload["instructions"] = instructions
+            payload["messages"] = []
+        else:
+            payload["messages"] = messages or []
         if custom is not None:
             payload["custom"] = custom
+        if description is not None:
+            payload["description"] = description
 
         headers = {
             "Content-Type": "application/json",
@@ -478,6 +486,118 @@ class LDPlatform:
             
         return response
     
+    ##################################################
+    # Create AI Tool
+    # https://launchdarkly.com/docs/api/ai-configs/post-ai-tool
+    ##################################################
+
+    def create_ai_tool(self, tool_key, description=None, schema=None, custom_parameters=None):
+        payload = {
+            "key": tool_key,
+            "schema": schema if schema is not None else {"properties": {}, "additionalProperties": False, "required": []}
+        }
+        if description:
+            payload["description"] = description
+        if custom_parameters is not None:
+            payload["customParameters"] = custom_parameters
+        if self.user_id:
+            payload["maintainerId"] = self.user_id
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        response = self.getrequest(
+            "POST",
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/ai-tools",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error creating AI tool {tool_key}: {data['message']}")
+                else:
+                    print(f"Created AI tool: {tool_key}")
+            except json.JSONDecodeError:
+                pass
+        return response
+
+    ##################################################
+    # Attach tools to an AI Config variation
+    # https://launchdarkly.com/docs/api/ai-configs/patch-ai-config-variation
+    ##################################################
+
+    def patch_variation_tools(self, ai_config_key, variation_key, tools):
+        payload = {"tools": tools}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/ai-configs/"
+            + ai_config_key
+            + "/variations/"
+            + variation_key
+        )
+        response = self.getrequest("PATCH", url, json=payload, headers=headers)
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error attaching tools to {ai_config_key}/{variation_key}: {data['message']}")
+            except json.JSONDecodeError:
+                pass
+        return response
+
+    ##################################################
+    # Create Agent Graph
+    # https://launchdarkly.com/docs/api/ai-configs/post-agent-graph
+    ##################################################
+
+    def create_agent_graph(self, graph_key, graph_name, description, edges, root_config_key=None):
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/agent-graphs"
+        )
+
+        payload = {
+            "key": graph_key,
+            "name": graph_name,
+            "description": description,
+            "edges": edges,
+        }
+        if root_config_key:
+            payload["rootConfigKey"] = root_config_key
+
+        if self.user_id:
+            payload["maintainerId"] = self.user_id
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        response = self.getrequest("POST", url, json=payload, headers=headers)
+        try:
+            data = json.loads(response.text)
+            if "message" in data:
+                print("Error creating agent graph: " + data["message"])
+            else:
+                print(f"Created agent graph: {graph_key}")
+        except json.JSONDecodeError:
+            print(f"Agent graph creation response status: {response.status_code}")
+        return response
+
     ##################################################
     # Create Custom Model Configuration
     ##################################################
@@ -1773,7 +1893,25 @@ class LDPlatform:
             payload["comment"] = comment
 
         res = self.getrequest("PATCH", url, headers=headers, json=payload)
-        return res
+
+        try:
+            data = json.loads(res.text)
+            if "message" in data:
+                print(f"Error toggling AI config: {data['message']}")
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        on_value = flag_state == "on"
+        json_patch_headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json",
+        }
+        json_patch_payload = [
+            {"op": "replace", "path": "/environments/" + flag_env + "/on", "value": on_value}
+        ]
+        res2 = self.getrequest("PATCH", url, headers=json_patch_headers, json=json_patch_payload)
+
+        return res2
 
     ##################################################
     # Add a maintainerId to flag

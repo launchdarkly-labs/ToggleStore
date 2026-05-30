@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import requests
 import uuid
@@ -65,6 +66,58 @@ AI_CONFIG_MONITORING_FLAG_KEY = "ai-config--togglebotchatbot"
 SHOPPING_ASSISTANT_AGENT_FLAG_KEY = "ai-config--togglestore-shopping-assistant-agent"
 SHOPPING_AGENT_ACCURACY_KEY = "shopping-agent-accuracy"
 SHOPPING_AGENT_NEGATIVE_FEEDBACK_KEY = "shopping-agent-negative-feedback"
+
+# Multi-Agent Pipeline AI Config keys
+MULTI_AGENT_KEYS = [
+    "ai-config--togglestore-triage",
+    "ai-config--togglestore-product-specialist",
+    "ai-config--togglestore-order-specialist",
+    "ai-config--togglestore-style-advisor",
+    "ai-config--togglestore-brand-voice",
+]
+
+MULTI_AGENT_PROFILES = {
+    "ai-config--togglestore-triage": {
+        "label": "Triage Agent",
+        "duration_range": (200, 800),
+        "prompt_tokens_range": (50, 150),
+        "completion_tokens_range": (30, 100),
+        "success_rate": 0.97,
+        "positive_feedback_rate": 0.70,
+    },
+    "ai-config--togglestore-product-specialist": {
+        "label": "Product Specialist",
+        "duration_range": (500, 2500),
+        "prompt_tokens_range": (100, 400),
+        "completion_tokens_range": (150, 600),
+        "success_rate": 0.95,
+        "positive_feedback_rate": 0.75,
+    },
+    "ai-config--togglestore-order-specialist": {
+        "label": "Order & Returns Specialist",
+        "duration_range": (400, 2000),
+        "prompt_tokens_range": (80, 300),
+        "completion_tokens_range": (100, 500),
+        "success_rate": 0.94,
+        "positive_feedback_rate": 0.65,
+    },
+    "ai-config--togglestore-style-advisor": {
+        "label": "Style & Sizing Advisor",
+        "duration_range": (600, 3000),
+        "prompt_tokens_range": (120, 450),
+        "completion_tokens_range": (200, 700),
+        "success_rate": 0.96,
+        "positive_feedback_rate": 0.80,
+    },
+    "ai-config--togglestore-brand-voice": {
+        "label": "Brand Voice Agent",
+        "duration_range": (300, 1500),
+        "prompt_tokens_range": (200, 500),
+        "completion_tokens_range": (150, 600),
+        "success_rate": 0.98,
+        "positive_feedback_rate": 0.78,
+    },
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -533,7 +586,7 @@ def ai_config_experiment_generator(client):
     time.sleep(0.5)  # Wait for final flush to complete
 
 def ai_configs_monitoring_results_generator(client):
-    """Monitoring results generator for AI Configs"""
+    """Monitoring results generator for AI Configs (completion-mode chatbot config)."""
     LD_FLAG_KEY = AI_CONFIG_MONITORING_FLAG_KEY
     NUM_RUNS = 1000
     
@@ -545,12 +598,11 @@ def ai_configs_monitoring_results_generator(client):
     
     logging.info("Starting AI Configs monitoring results generation...")
     
-
-    
     for i in range(NUM_RUNS):
         try:
             context = generate_user_context()
-            config, tracker = aiclient.config(LD_FLAG_KEY, context, {})
+            config = aiclient.completion_config(LD_FLAG_KEY, context)
+            tracker = config.create_tracker()
             
             duration = random.randint(500, 2000)
             time_to_first_token = random.randint(50, duration)
@@ -562,7 +614,7 @@ def ai_configs_monitoring_results_generator(client):
             
             tracker.track_duration(duration)
             tracker.track_tokens(tokens)
-            tracker.track_feedback(feedback_kind)
+            tracker.track_feedback({"kind": feedback_kind})
             tracker.track_time_to_first_token(time_to_first_token)
             
             if random.random() < 0.95:
@@ -579,7 +631,344 @@ def ai_configs_monitoring_results_generator(client):
             continue
     
     logging.info("AI Configs monitoring results generation completed")
-    # Do not flush or close client here; handled in generate_results
+
+def multi_agent_monitoring_results_generator(client):
+    """Monitoring results generator for the 5 multi-agent pipeline AI configs.
+    
+    Uses the proper AI SDK (agent_config + create_tracker) to populate
+    the Monitoring tab for each agent config with tokens, duration, TTFT,
+    success/error, and feedback metrics.
+    """
+    NUM_RUNS_PER_AGENT = 2000
+    
+    aiclient = LDAIClient(client)
+    
+    if not client.is_initialized():
+        logging.error("Failed to initialize LaunchDarkly client for multi-agent monitoring")
+        return
+    
+    logging.info("Starting multi-agent monitoring results generation (using AI SDK tracker)...")
+    
+    for agent_key in MULTI_AGENT_KEYS:
+        profile = MULTI_AGENT_PROFILES[agent_key]
+        logging.info(f"  Generating {NUM_RUNS_PER_AGENT} events for {profile['label']} ({agent_key})...")
+        
+        for i in range(NUM_RUNS_PER_AGENT):
+            try:
+                context = generate_user_context()
+                
+                agent_cfg = aiclient.agent_config(agent_key, context)
+                tracker = agent_cfg.create_tracker()
+                
+                dur_min, dur_max = profile["duration_range"]
+                duration = random.randint(dur_min, dur_max)
+                time_to_first_token = random.randint(50, max(60, duration // 3))
+                
+                pt_min, pt_max = profile["prompt_tokens_range"]
+                ct_min, ct_max = profile["completion_tokens_range"]
+                prompt_tokens = random.randint(pt_min, pt_max)
+                completion_tokens = random.randint(ct_min, ct_max)
+                total_tokens = prompt_tokens + completion_tokens
+                
+                tracker.track_duration(duration)
+                tracker.track_time_to_first_token(time_to_first_token)
+                tracker.track_tokens(TokenUsage(prompt_tokens, completion_tokens, total_tokens))
+                
+                if random.random() < profile["success_rate"]:
+                    tracker.track_success()
+                else:
+                    tracker.track_error()
+                
+                if random.random() < profile["positive_feedback_rate"]:
+                    tracker.track_feedback({"kind": FeedbackKind.Positive})
+                else:
+                    tracker.track_feedback({"kind": FeedbackKind.Negative})
+                
+                if (i + 1) % 500 == 0:
+                    logging.info(f"    Processed {i + 1}/{NUM_RUNS_PER_AGENT} events for {profile['label']}")
+                    client.flush()
+                    
+            except Exception as e:
+                logging.error(f"Error processing multi-agent event for {agent_key}, iteration {i}: {str(e)}")
+                continue
+        
+        client.flush()
+        time.sleep(1)
+    
+    logging.info("Multi-agent monitoring results generation completed (all 5 agents)")
+
+def brand_voice_experiment_results_generator(client):
+    """Experiment results generator for Brand Voice Model Comparison.
+    
+    Uses the AI SDK (agent_config + create_tracker) to generate monitoring
+    data, plus client.track() for the experiment-specific custom metrics.
+    """
+    LD_FEATURE_FLAG_KEY = "ai-config--togglestore-brand-voice"
+    NUM_USERS = 3000
+
+    MODEL_PROFILES = {
+        "sonnet": {
+            "accuracy": (91, 96),
+            "source_fidelity": (86, 92),
+            "relevance": (90, 96),
+            "cost": (0.35, 0.55),
+            "negative_feedback_rate": 0.05,
+        },
+        "nova": {
+            "accuracy": (87, 93),
+            "source_fidelity": (83, 89),
+            "relevance": (86, 92),
+            "cost": (0.10, 0.25),
+            "negative_feedback_rate": 0.08,
+        },
+        "gpt": {
+            "accuracy": (85, 91),
+            "source_fidelity": (81, 87),
+            "relevance": (84, 90),
+            "cost": (0.15, 0.30),
+            "negative_feedback_rate": 0.09,
+        },
+    }
+
+    DEFAULT_PROFILE = {
+        "accuracy": (85, 91),
+        "source_fidelity": (80, 86),
+        "relevance": (83, 89),
+        "cost": (0.20, 0.40),
+        "negative_feedback_rate": 0.10,
+    }
+
+    aiclient = LDAIClient(client)
+
+    logging.info("Starting Brand Voice model experiment results generation...")
+
+    for i in range(NUM_USERS):
+        try:
+            user_context = generate_user_context()
+            
+            agent_cfg = aiclient.agent_config(LD_FEATURE_FLAG_KEY, user_context)
+            tracker = agent_cfg.create_tracker()
+
+            model_name = ""
+            if agent_cfg.model:
+                model_name = (agent_cfg.model.name or "").lower()
+
+            profile = DEFAULT_PROFILE
+            for key, prof in MODEL_PROFILES.items():
+                if key in model_name:
+                    profile = prof
+                    break
+
+            accuracy = random.uniform(*profile["accuracy"])
+            source_fidelity = random.uniform(*profile["source_fidelity"])
+            relevance = random.uniform(*profile["relevance"])
+            cost = random.uniform(*profile["cost"])
+
+            # Experiment-level custom metrics
+            client.track(AI_ACCURACY_KEY, user_context, None, accuracy)
+            client.track(AI_SOURCE_FIDELITY_KEY, user_context, None, source_fidelity)
+            client.track(AI_RELEVANCE_KEY, user_context, None, relevance)
+            client.track(AI_COST_KEY, user_context, None, cost)
+
+            # Monitoring-level metrics via AI SDK tracker
+            duration = random.randint(300, 1500)
+            prompt_tokens = random.randint(200, 500)
+            completion_tokens = random.randint(150, 600)
+            tracker.track_duration(duration)
+            tracker.track_tokens(TokenUsage(prompt_tokens, completion_tokens, prompt_tokens + completion_tokens))
+            tracker.track_time_to_first_token(random.randint(40, max(50, duration // 4)))
+            tracker.track_success()
+
+            if random.random() < profile["negative_feedback_rate"]:
+                client.track(AI_CHATBOT_NEGATIVE_FEEDBACK_KEY, user_context)
+                tracker.track_feedback({"kind": FeedbackKind.Negative})
+            else:
+                tracker.track_feedback({"kind": FeedbackKind.Positive})
+
+            if (i + 1) % 500 == 0:
+                logging.info(f"Processed {i + 1} users for Brand Voice experiment")
+                client.flush()
+        except Exception as e:
+            logging.error(f"Error processing Brand Voice experiment user {i}: {str(e)}")
+            continue
+    logging.info("Brand Voice experiment results generation completed")
+
+AGENT_GRAPH_KEY = "togglestore-shopping-pipeline"
+
+SHOPPING_QUESTIONS = [
+    "What size should I get in the Toggle Hoodie? I usually wear a medium in Nike.",
+    "Can I return the Osmo Sneakers if they don't fit? I bought them last week.",
+    "What's the best jacket for cold weather? My budget is around $200.",
+    "Do you have the Toggle Backpack in black? The one I saw at the conference.",
+    "I need a gift for someone who likes streetwear. What would you recommend?",
+    "My order #12345 hasn't arrived yet. It's been 5 days since it shipped.",
+    "What material is the Feature Flag Tee made of? Is it pre-shrunk?",
+    "Compare the Osmo Sneakers with the Toggle Runners for me.",
+    "I want to exchange my Toggle Cap for a different color. How do I do that?",
+    "What are the most popular items right now?",
+    "Do you offer express shipping? I need something by Friday.",
+    "The zipper on my Toggle Hoodie broke after two washes. Can I get a replacement?",
+    "What outfit would go well with the Dark Mode joggers?",
+    "Are there any upcoming sales or promotions?",
+    "I'm a size 10 US in women's. What size Toggle Sneakers should I get?",
+    "Can you help me find a professional-looking outfit for a tech conference?",
+    "What's the difference between the Toggle Hoodie and the Toggle Pullover?",
+    "I received the wrong item in my order. How do I start a return?",
+]
+
+TRIAGE_ROUTES = {
+    "ai-config--togglestore-product-specialist": 0.35,
+    "ai-config--togglestore-order-specialist": 0.25,
+    "ai-config--togglestore-style-advisor": 0.30,
+}
+
+
+def agent_graph_results_generator(client, num_iterations=500):
+    """Generate synthetic agent graph data.
+    
+    Uses the AI SDK's agent_graph() to resolve the graph, then records
+    per-node metrics (via config trackers) and graph-level metrics (via
+    graph tracker) to populate the Agent Graph dashboard.
+    """
+    aiclient = LDAIClient(client)
+    
+    if not client.is_initialized():
+        logging.error("Failed to initialize LaunchDarkly client for agent graph generation")
+        return
+    
+    logging.info(f"Starting agent graph results generation ({num_iterations} iterations)...")
+    
+    for i in range(num_iterations):
+        try:
+            context = generate_user_context()
+            question = random.choice(SHOPPING_QUESTIONS)
+            
+            graph = aiclient.agent_graph(AGENT_GRAPH_KEY, context)
+            
+            if not graph.is_enabled():
+                if i == 0:
+                    logging.warning(f"Agent graph '{AGENT_GRAPH_KEY}' is disabled — skipping graph generation")
+                    return
+                continue
+            
+            graph_tracker = graph.create_tracker()
+            root_node = graph.root()
+            
+            if root_node is None:
+                logging.warning("Agent graph has no root node")
+                continue
+            
+            total_tokens_in = 0
+            total_tokens_out = 0
+            graph_start = time.time()
+            
+            # --- Node 1: Triage ---
+            triage_config = root_node.get_config()
+            triage_tracker = triage_config.create_tracker()
+            triage_key = root_node.get_key()
+            
+            triage_dur = random.randint(200, 800)
+            triage_prompt = random.randint(50, 150)
+            triage_completion = random.randint(30, 100)
+            
+            triage_tracker.track_duration(triage_dur)
+            triage_tracker.track_tokens(TokenUsage(triage_prompt, triage_completion, triage_prompt + triage_completion))
+            triage_tracker.track_time_to_first_token(random.randint(30, min(80, triage_dur)))
+            triage_tracker.track_success()
+            
+            total_tokens_in += triage_prompt
+            total_tokens_out += triage_completion
+            
+            # Pick a specialist route based on weighted probabilities
+            specialist_key = random.choices(
+                list(TRIAGE_ROUTES.keys()),
+                weights=list(TRIAGE_ROUTES.values()),
+                k=1,
+            )[0]
+            
+            # --- Node 2: Specialist ---
+            specialist_node = graph.get_node(specialist_key)
+            spec_profile = MULTI_AGENT_PROFILES.get(specialist_key, MULTI_AGENT_PROFILES["ai-config--togglestore-product-specialist"])
+            
+            if specialist_node is not None:
+                spec_config = specialist_node.get_config()
+                spec_tracker = spec_config.create_tracker()
+                
+                dur_min, dur_max = spec_profile["duration_range"]
+                spec_dur = random.randint(dur_min, dur_max)
+                pt_min, pt_max = spec_profile["prompt_tokens_range"]
+                ct_min, ct_max = spec_profile["completion_tokens_range"]
+                spec_prompt = random.randint(pt_min, pt_max)
+                spec_completion = random.randint(ct_min, ct_max)
+                
+                spec_tracker.track_duration(spec_dur)
+                spec_tracker.track_tokens(TokenUsage(spec_prompt, spec_completion, spec_prompt + spec_completion))
+                spec_tracker.track_time_to_first_token(random.randint(40, max(50, spec_dur // 4)))
+                spec_tracker.track_success()
+                
+                total_tokens_in += spec_prompt
+                total_tokens_out += spec_completion
+                
+                graph_tracker.track_handoff_success(triage_key, specialist_key)
+            else:
+                spec_dur = 0
+                specialist_key = triage_key
+            
+            # --- Node 3: Brand Voice ---
+            brand_key = "ai-config--togglestore-brand-voice"
+            brand_node = graph.get_node(brand_key)
+            
+            execution_path = [triage_key, specialist_key]
+            
+            if brand_node is not None:
+                brand_config = brand_node.get_config()
+                brand_tracker = brand_config.create_tracker()
+                
+                brand_dur = random.randint(300, 1500)
+                brand_prompt = random.randint(200, 500)
+                brand_completion = random.randint(150, 600)
+                
+                brand_tracker.track_duration(brand_dur)
+                brand_tracker.track_tokens(TokenUsage(brand_prompt, brand_completion, brand_prompt + brand_completion))
+                brand_tracker.track_time_to_first_token(random.randint(30, max(50, brand_dur // 5)))
+                brand_tracker.track_success()
+                
+                if random.random() < 0.78:
+                    brand_tracker.track_feedback({"kind": FeedbackKind.Positive})
+                else:
+                    brand_tracker.track_feedback({"kind": FeedbackKind.Negative})
+                
+                total_tokens_in += brand_prompt
+                total_tokens_out += brand_completion
+                
+                graph_tracker.track_handoff_success(specialist_key, brand_key)
+                execution_path.append(brand_key)
+            
+            # --- Graph-level metrics ---
+            graph_duration = int((time.time() - graph_start) * 1000) + triage_dur + spec_dur + (brand_dur if brand_node else 0)
+            
+            graph_tracker.track_total_tokens(TokenUsage(
+                total_tokens_in, total_tokens_out, total_tokens_in + total_tokens_out,
+            ))
+            graph_tracker.track_invocation_success()
+            graph_tracker.track_duration(graph_duration)
+            graph_tracker.track_path(execution_path)
+            
+            if (i + 1) % 100 == 0:
+                logging.info(f"  Agent graph: processed {i + 1}/{num_iterations} iterations")
+                client.flush()
+                time.sleep(0.2)
+            
+            time.sleep(0.01)
+                
+        except Exception as e:
+            logging.error(f"Error in agent graph iteration {i}: {str(e)}")
+            continue
+    
+    client.flush()
+    time.sleep(1)
+    logging.info(f"Agent graph results generation completed ({num_iterations} iterations)")
+
 
 def shopping_assistant_agent_generator(client, stop_event):
     """Guarded rollout generator for Shopping Assistant Agent - SUCCESSFUL release"""
@@ -692,7 +1081,7 @@ def shopping_assistant_agent_generator(client, stop_event):
     logging.info(f"Shopping Assistant Agent generator finished. Total users: {user_counter}")
 
 def generate_results(project_key, api_key):
-    """Main function to generate all results"""
+    """Main function to generate all results (single run)."""
     logging.info(f"Generating results for project {project_key}")
     
     sdk_key = os.getenv("LD_SDK_KEY")
@@ -700,11 +1089,10 @@ def generate_results(project_key, api_key):
         logging.error("LD_SDK_KEY not set in environment. Skipping results generation.")
         return
     
-    # Configure SDK with larger event buffer to reduce connection pool pressure
     config = Config(
         sdk_key=sdk_key,
-        events_max_pending=5000,  # Increase pending events buffer to batch more events
-        flush_interval=5.0  # Flush events every 5 seconds automatically
+        events_max_pending=5000,
+        flush_interval=5.0,
     )
     ldclient.set_config(config)
     client = ldclient.get()
@@ -720,7 +1108,7 @@ def generate_results(project_key, api_key):
         logging.info("=" * 60)
         evaluate_all_flags(client)
         
-        # 2. Generate experiment results (run before guarded rollouts for faster completion)
+        # 2. Generate experiment results
         logging.info("=" * 60)
         logging.info("STEP 2: Generating experiment results")
         logging.info("=" * 60)
@@ -731,7 +1119,7 @@ def generate_results(project_key, api_key):
         
         logging.info("Experiment results generation completed.")
         
-        # 2.5. Generate AI Config monitoring results
+        # 2.5. Generate AI Config monitoring results (chatbot)
         logging.info("=" * 60)
         logging.info("STEP 2.5: Generating AI Config monitoring results")
         logging.info("=" * 60)
@@ -739,6 +1127,25 @@ def generate_results(project_key, api_key):
         ai_configs_monitoring_results_generator(client)
         
         logging.info("AI Config monitoring results generation completed.")
+        
+        # 2.6. Generate multi-agent pipeline monitoring + experiment results
+        logging.info("=" * 60)
+        logging.info("STEP 2.6: Generating multi-agent pipeline monitoring results")
+        logging.info("=" * 60)
+        
+        multi_agent_monitoring_results_generator(client)
+        brand_voice_experiment_results_generator(client)
+        
+        logging.info("Multi-agent pipeline results generation completed.")
+        
+        # 2.7. Generate agent graph data
+        logging.info("=" * 60)
+        logging.info("STEP 2.7: Generating agent graph results")
+        logging.info("=" * 60)
+        
+        agent_graph_results_generator(client, num_iterations=500)
+        
+        logging.info("Agent graph results generation completed.")
         
         # 3. Generate guarded rollout results
         logging.info("=" * 60)
@@ -769,7 +1176,6 @@ def generate_results(project_key, api_key):
         logging.info("Guarded rollout generators are running...")
         logging.info("They will continue until measured rollouts complete.")
         
-        # Wait for all generators to complete
         payments_thread.join()
         email_service_thread.join()
         shopping_assistant_thread.join()
@@ -781,14 +1187,131 @@ def generate_results(project_key, api_key):
         logging.info("=" * 60)
         
     finally:
-        # Ensure all events are flushed before closing
         logging.info("Performing final flush to ensure all events are sent...")
         client.flush()
-        time.sleep(2)  # Wait for flush to complete
-        client.flush()  # Double flush to ensure all events are sent
-        time.sleep(1)  # Final wait
+        time.sleep(2)
+        client.flush()
+        time.sleep(1)
         logging.info("Final flush completed. Closing client...")
         client.close()
+
+
+def generate_continuous(project_key, api_key, interval_minutes=30):
+    """Run AI monitoring + agent graph generation in a continuous loop.
+    
+    Generates fresh monitoring data for the multi-agent pipeline, brand voice
+    experiment, and agent graph on a configurable interval. Ideal for keeping
+    demo dashboards populated with recent data without needing a Lambda scheduler.
+    
+    Usage:
+        python LDResultsGenerator.py --continuous [--interval 30]
+    """
+    sdk_key = os.getenv("LD_SDK_KEY")
+    if not sdk_key:
+        logging.error("LD_SDK_KEY not set in environment. Exiting.")
+        return
+    
+    logging.info(f"Starting continuous results generation for project {project_key}")
+    logging.info(f"Interval: {interval_minutes} minutes between cycles")
+    logging.info("Press Ctrl+C to stop\n")
+    
+    config = Config(
+        sdk_key=sdk_key,
+        events_max_pending=5000,
+        flush_interval=5.0,
+    )
+    ldclient.set_config(config)
+    client = ldclient.get()
+    
+    if not client.is_initialized():
+        logging.error("Failed to initialize LaunchDarkly client")
+        return
+    
+    cycle = 0
+    try:
+        while True:
+            cycle += 1
+            logging.info("=" * 60)
+            logging.info(f"CONTINUOUS CYCLE {cycle} — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logging.info("=" * 60)
+            
+            try:
+                # AI Config chatbot monitoring
+                logging.info("[Cycle %d] Generating chatbot monitoring data (200 runs)...", cycle)
+                aiclient = LDAIClient(client)
+                for i in range(200):
+                    try:
+                        ctx = generate_user_context()
+                        cfg = aiclient.completion_config(AI_CONFIG_MONITORING_FLAG_KEY, ctx)
+                        t = cfg.create_tracker()
+                        dur = random.randint(500, 2000)
+                        pt = random.randint(20, 100)
+                        ct = random.randint(50, 500)
+                        t.track_duration(dur)
+                        t.track_tokens(TokenUsage(pt, ct, pt + ct))
+                        t.track_time_to_first_token(random.randint(50, dur))
+                        if random.random() < 0.95:
+                            t.track_success()
+                        else:
+                            t.track_error()
+                        t.track_feedback({"kind": FeedbackKind.Positive if random.random() < 0.5 else FeedbackKind.Negative})
+                    except Exception as e:
+                        logging.debug(f"Chatbot monitoring error: {e}")
+                    if (i + 1) % 100 == 0:
+                        client.flush()
+                
+                # Multi-agent monitoring
+                logging.info("[Cycle %d] Generating multi-agent monitoring data (300/agent)...", cycle)
+                for agent_key in MULTI_AGENT_KEYS:
+                    profile = MULTI_AGENT_PROFILES[agent_key]
+                    for i in range(300):
+                        try:
+                            ctx = generate_user_context()
+                            agent_cfg = aiclient.agent_config(agent_key, ctx)
+                            t = agent_cfg.create_tracker()
+                            dur_min, dur_max = profile["duration_range"]
+                            dur = random.randint(dur_min, dur_max)
+                            pt_min, pt_max = profile["prompt_tokens_range"]
+                            ct_min, ct_max = profile["completion_tokens_range"]
+                            pt = random.randint(pt_min, pt_max)
+                            ct = random.randint(ct_min, ct_max)
+                            t.track_duration(dur)
+                            t.track_tokens(TokenUsage(pt, ct, pt + ct))
+                            t.track_time_to_first_token(random.randint(30, max(50, dur // 3)))
+                            if random.random() < profile["success_rate"]:
+                                t.track_success()
+                            else:
+                                t.track_error()
+                            if random.random() < profile["positive_feedback_rate"]:
+                                t.track_feedback({"kind": FeedbackKind.Positive})
+                            else:
+                                t.track_feedback({"kind": FeedbackKind.Negative})
+                        except Exception as e:
+                            logging.debug(f"Multi-agent monitoring error ({agent_key}): {e}")
+                    client.flush()
+                
+                # Agent graph
+                logging.info("[Cycle %d] Generating agent graph data (100 iterations)...", cycle)
+                agent_graph_results_generator(client, num_iterations=100)
+                
+            except Exception as e:
+                logging.error(f"Error in cycle {cycle}: {str(e)}")
+            
+            client.flush()
+            time.sleep(2)
+            
+            logging.info(f"[Cycle {cycle}] Complete. Sleeping {interval_minutes} minutes until next cycle...")
+            time.sleep(interval_minutes * 60)
+            
+    except KeyboardInterrupt:
+        logging.info("\nContinuous generation stopped by user.")
+    finally:
+        logging.info("Performing final flush...")
+        client.flush()
+        time.sleep(2)
+        client.close()
+        logging.info("Done.")
+
 
 if __name__ == "__main__":
     PROJECT_KEY = os.getenv("LD_PROJECT_KEY")
@@ -798,5 +1321,15 @@ if __name__ == "__main__":
         logging.error("LD_PROJECT_KEY and LD_API_KEY must be set in environment")
         exit(1)
     
-    generate_results(PROJECT_KEY, LD_API_KEY)
+    if "--continuous" in sys.argv:
+        interval = 30
+        if "--interval" in sys.argv:
+            try:
+                idx = sys.argv.index("--interval")
+                interval = int(sys.argv[idx + 1])
+            except (IndexError, ValueError):
+                logging.warning("Invalid --interval value, using default 30 minutes")
+        generate_continuous(PROJECT_KEY, LD_API_KEY, interval_minutes=interval)
+    else:
+        generate_results(PROJECT_KEY, LD_API_KEY)
 

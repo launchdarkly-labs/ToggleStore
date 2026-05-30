@@ -363,7 +363,7 @@ export async function POST(request: NextRequest) {
         try {
           // Create chat with initial context (ai.fallback = false)
           // We create the chat directly without calling aiClient.config() first to save time
-          const chat = await aiClient.createChat(
+          const chat = await aiClient.createModel(
             aiConfigKey,
             context,
             defaultConfig,
@@ -371,8 +371,8 @@ export async function POST(request: NextRequest) {
           )
 
           if (!chat) {
-            logger.warn("Failed to create chat", { aiConfigKey })
-            const errorData = JSON.stringify({ error: "Failed to create chat", done: true })
+            logger.warn("Failed to create model", { aiConfigKey })
+            const errorData = JSON.stringify({ error: "Failed to create model", done: true })
             controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
             controller.close()
             return
@@ -466,16 +466,16 @@ export async function POST(request: NextRequest) {
               throw new Error("userInput cannot be empty")
           }
           
-          const chatResponse = await chat.invoke(userInput)
+          const chatResponse = await chat.run(userInput)
           
-          let finalResponse = chatResponse.message?.content || ""
+          let finalResponse = chatResponse.content || ""
           let originalBadResponse = "" // Store original response if fallback occurs
           
           // Log the chat response structure to understand what's available
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const chatResponseAny = chatResponse as any
-          logger.info("Chat response structure after invoke", {
-            hasMessage: !!chatResponse.message,
+          logger.info("Chat response structure after run", {
+            hasContent: !!chatResponse.content,
             hasEvaluations: !!chatResponse.evaluations,
             evaluationsType: chatResponse.evaluations ? (chatResponse.evaluations instanceof Promise ? 'Promise' : typeof chatResponse.evaluations) : 'none',
             responseKeys: Object.keys(chatResponse),
@@ -638,8 +638,8 @@ export async function POST(request: NextRequest) {
               const { model: fallbackModel } = fallbackConfig
               finalModelName = fallbackModel?.name || finalModelName
 
-              // Also check fallbackConfig.tracker for variation name
-              const fallbackTracker = fallbackConfig.tracker as unknown as TrackerWithInternals
+              // Also check fallbackConfig tracker for variation name
+              const fallbackTracker = fallbackConfig.createTracker() as unknown as TrackerWithInternals
               if (fallbackTracker && typeof fallbackTracker._variationKey === 'string') {
                 const variationKey = fallbackTracker._variationKey;
                 if (variationKey.includes('good-prompt')) {
@@ -652,7 +652,7 @@ export async function POST(request: NextRequest) {
               }
 
               // Create new chat with fallback context
-              const fallbackChat = await aiClient.createChat(
+              const fallbackChat = await aiClient.createModel(
                 aiConfigKey,
                 context,
                 defaultConfig,
@@ -684,9 +684,9 @@ export async function POST(request: NextRequest) {
                    }
                 }
 
-                const fallbackResponse = await fallbackChat.invoke(userInput)
+                const fallbackResponse = await fallbackChat.run(userInput)
                 
-                finalResponse = fallbackResponse.message?.content || finalResponse
+                finalResponse = fallbackResponse.content || finalResponse
                 didFallback = true
 
                 // Get fallback judge evaluation results - use same optimization as initial
@@ -827,13 +827,11 @@ export async function POST(request: NextRequest) {
              estimatedInputTokens += Math.ceil(userInput.length / 4)
           }
           
-          // Fallback to getMessages if we couldn't estimate from internals
+          // Fallback to getConfig().messages if we couldn't estimate from internals
           if (estimatedInputTokens === 0) {
-            const messages = chat.getMessages()
-            // Note: getMessages() might include the response, but we want input only.
-            // This fallback is approximate.
+            const configMessages = chat.getConfig().messages ?? []
             estimatedInputTokens = Math.ceil(
-              messages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0) / 4
+              configMessages.reduce((sum: number, msg: { content?: string }) => sum + (msg.content?.length || 0), 0) / 4
             )
           }
           const estimatedOutputTokens = Math.ceil(finalResponse.length / 4)

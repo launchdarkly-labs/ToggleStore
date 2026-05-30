@@ -10,6 +10,7 @@ import {
   BedrockRuntimeClient,
   ConverseStreamCommand,
 } from "@aws-sdk/client-bedrock-runtime"
+import { runMultiAgentPipeline } from "@/lib/multi-agent"
 
 interface LaunchDarklyContext {
   kind: string
@@ -214,25 +215,158 @@ export async function POST(request: NextRequest) {
         }
       : null
 
-    // Prepare variables for AI config template replacement
-    // The AI config messages can reference these variables:
-    // - {{ ldctx.location }} - City from LaunchDarkly context
-    // - {{ ldctx.user.tier }} - Account Tier from LaunchDarkly context
-    // - {{ ldctx.user.name }} - User Name from LaunchDarkly context
-    // - {{ userInput }} - Current user query
-    // - {{ products_list }} - Complete product catalog
+    // ── Multi-Agent Pipeline ──
+    // When the default AI Model Experiment chatbot is used and the triage agent
+    // is enabled, route through the multi-agent pipeline instead of single-model.
+    if (aiConfigKey === "ai-config--togglebotchatbot") {
+      const triageEnabled = await ldClient.variation(
+        "ai-config--togglestore-triage",
+        context,
+        null
+      )
+
+      if (triageEnabled !== null) {
+        const encoder = new TextEncoder()
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              const pipelineResult = await runMultiAgentPipeline(
+                {
+                  userInput,
+                  customerContext: {},
+                  chatHistory: chatHistory as Array<{
+                    role: string
+                    content: string
+                  }>,
+                  cartDetails: formattedCartDetails,
+                  ldContext: context,
+                },
+                (status: string) => {
+                  const statusData = JSON.stringify({ status, done: false })
+                  controller.enqueue(
+                    encoder.encode(`data: ${statusData}\n\n`)
+                  )
+                }
+              )
+
+              // Stream the final response word by word for smooth UX
+              const words = pipelineResult.finalResponse.split(" ")
+              for (let i = 0; i < words.length; i++) {
+                const chunk = (i > 0 ? " " : "") + words[i]
+                const chunkData = JSON.stringify({ chunk, done: false })
+                controller.enqueue(
+                  encoder.encode(`data: ${chunkData}\n\n`)
+                )
+                await new Promise((resolve) => setTimeout(resolve, 20))
+              }
+
+              // Try to extract product data from response
+              let productData:
+                | { productId?: string; productName?: string; selectedSize?: string }
+                | undefined
+
+              const readyKeywords = ["ready", "add to cart", "selected", "here is", "here's"]
+              const isReady = readyKeywords.some((kw) =>
+                pipelineResult.finalResponse.toLowerCase().includes(kw)
+              )
+              if (isReady) {
+                for (const product of formattedProducts) {
+                  if (
+                    pipelineResult.finalResponse
+                      .toLowerCase()
+                      .includes(product.name.toLowerCase())
+                  ) {
+                    productData = {
+                      productId: product.id,
+                      productName: product.name,
+                    }
+                    break
+                  }
+                }
+              }
+
+              const totalTokens = {
+                input:
+                  pipelineResult.triageResult.tokens.input +
+                  pipelineResult.specialistResult.tokens.input +
+                  pipelineResult.brandVoiceResult.tokens.input,
+                output:
+                  pipelineResult.triageResult.tokens.output +
+                  pipelineResult.specialistResult.tokens.output +
+                  pipelineResult.brandVoiceResult.tokens.output,
+                total:
+                  pipelineResult.triageResult.tokens.total +
+                  pipelineResult.specialistResult.tokens.total +
+                  pipelineResult.brandVoiceResult.tokens.total,
+              }
+
+              const finalData = JSON.stringify({
+                response: pipelineResult.finalResponse,
+                modelName: `Pipeline: ${pipelineResult.specialistResult.modelName}`,
+                modelType: "multi-agent",
+                enabled: true,
+                timing: {
+                  timeToFirstToken: pipelineResult.triageResult.durationMs,
+                  totalTime: pipelineResult.totalDurationMs,
+                },
+                tokens: totalTokens,
+                productData,
+                pipeline: {
+                  category: pipelineResult.triageCategory,
+                  triageModel: pipelineResult.triageResult.modelName,
+                  specialistModel: pipelineResult.specialistResult.modelName,
+                  brandVoiceModel: pipelineResult.brandVoiceResult.modelName,
+                },
+                done: true,
+              })
+
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
+              controller.close()
+            } catch (error) {
+              const errorObj =
+                error instanceof Error ? error : new Error(String(error))
+
+              logger.error("Multi-agent pipeline error", errorObj, {
+                endpoint: "/api/chat",
+                component: "multi-agent-pipeline",
+              })
+
+              await recordErrorToLD(
+                errorObj,
+                "Multi-agent pipeline error",
+                { component: "MultiAgentPipeline", endpoint: "/api/chat" }
+              )
+
+              const errorData = JSON.stringify({
+                error: errorObj.message,
+                done: true,
+              })
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+              controller.close()
+            }
+          },
+        })
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        })
+      }
+    }
+
+    // ── Single-Model Fallback (original behavior) ──
     const templateVariables = {
       userInput: userInput,
       chatHistory: chatHistory,
-      products_list: formattedProducts, // Pass formatted products for template use
+      products_list: formattedProducts,
     }
 
-    // Get AI Config with variables for template replacement
-    // The context object is passed as 'ldctx' in templates (e.g., {{ ldctx.location }})
-    // Type assertion needed because LaunchDarkly SDK accepts various context structures (single or multi-context)
     const aiConfig = await aiClient.config(
       aiConfigKey,
-      context, // SDK accepts various context structures at runtime
+      context,
       {},
       templateVariables
     )
@@ -321,8 +455,7 @@ export async function POST(request: NextRequest) {
     const messages = aiConfig.messages
     const model = aiConfig.model
 
-    // Get tracker for metrics
-    const { tracker } = aiConfig
+    const tracker = aiConfig.createTracker()
     const startTime = Date.now()
 
     try {

@@ -84,6 +84,19 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }} .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
 
+      - name: Upload source maps to LaunchDarkly
+        if: env.LD_API_KEY != ''
+        run: |
+          CONTAINER_ID=$(docker create ${{ steps.login-ecr.outputs.registry }}/togglestore:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }})
+          docker cp $CONTAINER_ID:/app/.next/static ./sourcemaps-static
+          docker rm $CONTAINER_ID
+          npx ldcli sourcemaps upload \
+            --project-key ${{ env.LD_PROJECT_KEY }} \
+            --environment production \
+            --source-map-directory ./sourcemaps-static \
+            --access-token ${{ env.LD_API_KEY }} || echo "Source map upload failed (non-blocking)"
+          rm -rf ./sourcemaps-static
+
       - name: Update K8s Deploy File
         run: python ./.github/workflows/update_k8s_deploy_file.py
         env:

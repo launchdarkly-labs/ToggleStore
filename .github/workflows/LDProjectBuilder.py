@@ -2,6 +2,7 @@ import LDPlatform
 import time
 import os
 import subprocess
+import json
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -39,6 +40,8 @@ class ToggleStoreBuilder:
         self.create_ai_config()
         self.enable_csa_shadow_ai_feature_flags()
         self.create_and_run_experiments()
+        self.create_and_run_layer()
+        self.create_and_run_holdout()
         self.project_settings()
         
         # Prepare environment variables for the subprocess
@@ -131,6 +134,10 @@ class ToggleStoreBuilder:
         # Shopping Assistant Agent metrics
         self.metric_shopping_agent_accuracy()
         self.metric_shopping_agent_negative_feedback()
+
+        # Rewards engagement metrics (for frequentist experiment)
+        self.metric_rewards_signup_rate()
+        self.metric_rewards_points_earned()
         
         print("Done")
         self.metrics_created = True
@@ -163,6 +170,7 @@ class ToggleStoreBuilder:
         self.flag_api_release()
         self.flag_search_algorithm()
         self.flag_store_promo_banner()
+        self.flag_holdout_q4_revenue_optimization()
         
         print("Done")
         self.flags_created = True
@@ -172,10 +180,12 @@ class ToggleStoreBuilder:
     # Create AI Config
     def create_ai_config(self):
         print("Creating AI Config...")
+        tool_versions = self.create_foundational_ai_tools()
         self.create_togglebot_chatbot_ai_config()
         self.create_togglebot_self_heal_chatbot_ai_config()
         self.create_custom_shopping_models()
         self.create_togglestore_shopping_assistant_agent()
+        self.create_togglestore_multi_agent_ai_configs(tool_versions)
         print("Done")
         self.ai_config_created = True
         
@@ -202,6 +212,8 @@ class ToggleStoreBuilder:
         self.run_search_algorithm_experiment()
         self.run_store_promo_banner_experiment()
         self.run_ai_config_experiment()
+        self.run_rewards_engagement_experiment()
+        self.run_brand_voice_model_experiment()
         
     def run_search_algorithm_experiment(self):
         if not self.metrics_created:
@@ -306,6 +318,111 @@ class ToggleStoreBuilder:
             flagConfigVersion=1
         )
 
+    def run_rewards_engagement_experiment(self):
+        if not self.metrics_created:
+            print("Error: Metrics not created")
+            return
+        print("Creating experiment: ")
+        self.ldproject.toggle_flag(
+            "rewardsProgram",
+            "on",
+            "production",
+            "Turn on flag for experiment",
+        )
+        print(" - (Frequentist) Feature Experiment: Rewards Program Engagement")
+        self.create_rewards_engagement_experiment()
+        self.ldproject.start_exp_iteration("rewards-engagement-experiment", "production")
+        self.experiment_created = True
+    
+    def create_rewards_engagement_experiment(self):
+        metrics = [
+            self.ldproject.exp_metric("rewards-accessed", False),
+            self.ldproject.exp_metric("rewards-signup-rate", False),
+            self.ldproject.exp_metric("rewards-points-earned", False),
+            self.ldproject.exp_metric("checkout-complete", False)
+        ]
+        res = self.ldproject.create_experiment(
+            "rewards-engagement-experiment",
+            "(Frequentist) Feature Experiment: Rewards Program Engagement",
+            "production",
+            "rewardsProgram",
+            "Evaluating whether the rewards program increases user engagement and conversion rates. This frequentist experiment measures statistical significance of the rewards program's impact on signup rates, points earned, rewards page visits, and downstream checkout conversions.",
+            metrics=metrics,
+            primary_key="rewards-signup-rate",
+            attributes=["device", "location", "tier", "operating_system"],
+            methodology="frequentist",
+            analysisConfig={"significanceThreshold": "5", "testDirection": "two-sided"},
+            flagConfigVersion=2
+        )
+
+############################################################################################################
+
+    ##################################################
+    # Holdout Definitions
+    ##################################################
+    
+    def create_and_run_holdout(self):
+        print("Creating holdout: Q4 Revenue Optimization...")
+        self.run_q4_revenue_optimization_holdout()
+    
+    def run_q4_revenue_optimization_holdout(self):
+        metrics = [
+            {
+                "key": "cart-total",
+                "isGroup": False,
+                "primary": True
+            }
+        ]
+        res = self.ldproject.create_holdout(
+            holdout_key="q4-revenue-optimization",
+            holdout_name="Q4 Revenue Optimization Holdout",
+            holdout_env_key="production",
+            description="Measures the cumulative revenue impact of running the Store Promo Banner and Search Algorithm experiments together. A 5% holdout group is excluded from all checkout experiments to determine whether the combined experiment portfolio increases average cart revenue.",
+            metrics=metrics,
+            primary_metric_key="cart-total",
+            randomization_unit="user",
+            attributes=["tier", "device", "location"],
+            prerequisiteflagkey="q4-revenue-optimization-holdout"
+        )
+        print("Done")
+
+############################################################################################################
+
+    ##################################################
+    # Layer Definitions
+    ##################################################
+    
+    def create_and_run_layer(self):
+        print("Creating experiment layer: Checkout Experiment Layer...")
+        self.run_checkout_experiment_layer()
+        print("Updating layer with experiment reservations...")
+        self.update_checkout_experiment_layer()
+        print("Done")
+    
+    def run_checkout_experiment_layer(self):
+        res = self.ldproject.create_layer(
+            description="Ensures the Store Promo Banner and Search Algorithm experiments run on non-overlapping traffic to maintain clean statistical results for checkout optimization.",
+        )
+    
+    def update_checkout_experiment_layer(self):
+        instructions = [
+            {
+                "experimentKey": "store-promo-banner-experiment",
+                "kind": "updateExperimentReservation",
+                "reservationPercent": 50
+            },
+            {
+                "experimentKey": "search-algorithm-experiment",
+                "kind": "updateExperimentReservation",
+                "reservationPercent": 50
+            }
+        ]
+        res = self.ldproject.update_layer(
+            layer_key="checkout-experiment-layer",
+            environmentKey="production",
+            instructions=instructions
+        )
+
 ############################################################################################################
 
     # Add user id to flags    
@@ -326,6 +443,12 @@ class ToggleStoreBuilder:
         res = self.ldproject.add_maintainer_to_flag("ai-config--togglebotchatbot")
         res = self.ldproject.add_maintainer_to_flag("ai-config--togglebot-self-heal-chatbot")
         res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-shopping-assistant-agent")
+        res = self.ldproject.add_maintainer_to_flag("q4-revenue-optimization-holdout")
+        res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-triage")
+        res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-product-specialist")
+        res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-order-specialist")
+        res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-style-advisor")
+        res = self.ldproject.add_maintainer_to_flag("ai-config--togglestore-brand-voice")
 
 ############################################################################################################
 
@@ -394,6 +517,11 @@ class ToggleStoreBuilder:
         res = self.ldproject.update_flag_client_side_availability("ai-config--togglebotchatbot")
         res = self.ldproject.update_flag_client_side_availability("ai-config--togglebot-self-heal-chatbot")
         res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-shopping-assistant-agent")
+        res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-triage")
+        res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-product-specialist")
+        res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-order-specialist")
+        res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-style-advisor")
+        res = self.ldproject.update_flag_client_side_availability("ai-config--togglestore-brand-voice")
 
 ############################################################################################################
 
@@ -669,6 +797,28 @@ class ToggleStoreBuilder:
             tags=["ai-agent", "ai-metrics", "togglestore"]
         )
 
+    def metric_rewards_signup_rate(self):
+        res = self.ldproject.create_metric(
+            "rewards-signup-rate",
+            "Rewards Program Signup Rate",
+            "rewards-signup-rate",
+            "Tracks the rate at which users sign up for the rewards program after being exposed to it",
+            success_criteria="HigherThanBaseline",
+            tags=["experiment", "rewards", "engagement", "togglestore"]
+        )
+
+    def metric_rewards_points_earned(self):
+        res = self.ldproject.create_metric(
+            "rewards-points-earned",
+            "Rewards Points Earned",
+            "rewards-points-earned",
+            "Tracks the total reward points earned by users engaged in the rewards program",
+            numeric=True,
+            unit="points",
+            success_criteria="HigherThanBaseline",
+            tags=["experiment", "rewards", "engagement", "togglestore"]
+        )
+
 ############################################################################################################
 
     ##################################################
@@ -868,6 +1018,21 @@ class ToggleStoreBuilder:
             ],
             tags=["experiment", "funnel", "promo", "togglestore"],
             on_variation=0,
+        )
+
+    def flag_holdout_q4_revenue_optimization(self):
+        res = self.ldproject.create_flag(
+            "q4-revenue-optimization-holdout",
+            "Q4 Revenue Optimization Holdout Flag",
+            "Prerequisite flag for the Q4 revenue optimization holdout — measures cumulative impact of checkout experiments on cart revenue",
+            [
+                {"value": True, "name": "In holdout"},
+                {"value": False, "name": "Not in holdout"},
+            ],
+            purpose="holdout",
+            on_variation=0,
+            off_variation=1,
+            tags=["holdout", "experimentation", "revenue", "togglestore"],
         )
 
 ############################################################################################################
@@ -1297,6 +1462,485 @@ class ToggleStoreBuilder:
             print("Shopping Assistant Agent guarded rollout configured successfully")
         except Exception as e:
             print(f"Warning: Failed to setup guarded rollout for Shopping Assistant Agent: {e}")
+
+############################################################################################################
+
+    def create_foundational_ai_tools(self):
+        """Create the four foundational AI tools and return a dict mapping key -> version."""
+        print("Creating foundational AI tools...")
+        tool_defs = [
+            {
+                "key": "get-customer-context",
+                "description": "Returns a lightweight customer profile (name, preferences, purchase history) so agents can tailor recommendations and responses.",
+                "schema": {"properties": {}, "additionalProperties": False, "required": []},
+            },
+            {
+                "key": "search-product-catalog",
+                "description": "Searches the ToggleStore product catalog by name, category, size, or price range. Use when answering product availability or recommendation questions.",
+                "schema": {
+                    "properties": {"query": {"type": "string", "description": "Search query or product name"}},
+                    "additionalProperties": False,
+                    "required": ["query"],
+                },
+            },
+            {
+                "key": "check-order-status",
+                "description": "Looks up order status, tracking information, and return eligibility for a given order ID.",
+                "schema": {
+                    "properties": {
+                        "orderId": {"type": "string", "description": "The order ID to look up"},
+                    },
+                    "additionalProperties": False,
+                    "required": ["orderId"],
+                },
+            },
+            {
+                "key": "get-size-recommendation",
+                "description": "Provides personalized size recommendations based on customer measurements, past purchases, and product fit data.",
+                "schema": {
+                    "properties": {
+                        "productId": {"type": "string", "description": "Product ID to get sizing for"},
+                        "measurements": {"type": "object", "description": "Customer measurements (height, weight, etc.)"},
+                    },
+                    "additionalProperties": False,
+                    "required": ["productId"],
+                },
+            },
+        ]
+        tool_versions = {}
+        for t in tool_defs:
+            resp = self.ldproject.create_ai_tool(t["key"], description=t.get("description"), schema=t["schema"])
+            try:
+                data = json.loads(resp.text)
+                tool_versions[t["key"]] = data.get("version", 1)
+            except (json.JSONDecodeError, AttributeError):
+                tool_versions[t["key"]] = 1
+            time.sleep(0.3)
+        print("Done creating foundational AI tools.")
+        return tool_versions
+
+    def create_togglestore_multi_agent_ai_configs(self, tool_versions=None):
+        """Create 5 multi-agent AI configs for the ToggleStore shopping pipeline."""
+        if tool_versions is None:
+            tool_versions = {}
+
+        def _tools(*keys):
+            return [{"key": k, "version": tool_versions.get(k, 1)} for k in keys]
+
+        nova_pro_config = {
+            "modelName": "amazon.nova-pro-v1:0",
+            "parameters": {"maxTokens": 1000, "temperature": 0.5}
+        }
+        nova_pro_config_key = "Bedrock.amazon.nova-pro-v1:0"
+
+        gpt5_mini_config = {
+            "modelName": "gpt-5-mini",
+            "parameters": {},
+            "custom": {}
+        }
+        gpt5_mini_config_key = "OpenAI.gpt-5-mini"
+
+        sonnet_config = {
+            "modelName": "anthropic.claude-sonnet-4-6",
+            "parameters": {"maxTokens": 1000, "temperature": 0.5}
+        }
+        sonnet_config_key = "Bedrock.anthropic.claude-sonnet-4-6"
+
+        tags = ["ai-models", "ai-config", "multi-agent", "togglestore"]
+
+        # -----------------------------------------------------------
+        # 1. Triage Agent
+        # -----------------------------------------------------------
+        triage_instructions = (
+            "You are a shopping query classifier for ToggleStore. Classify the customer's query into exactly one category.\n\n"
+            "Use the following customer context when classifying: {{ customer_context }}\n\n"
+            "Categories:\n"
+            "- products: Product search, recommendations, availability, pricing, comparisons\n"
+            "- orders: Order status, tracking, returns, exchanges, refunds, cancellations\n"
+            "- style: Size advice, outfit recommendations, style tips, fit questions, what to wear\n"
+            "- general: Store policies, shipping info, account questions, other inquiries\n\n"
+            "The user's query is: {{ userInput }}\n\n"
+            "Return ONLY a JSON object (no markdown fencing):\n"
+            "{\"category\": \"<key>\", \"confidence\": <0-1>, \"reasoning\": \"<one sentence>\"}"
+        )
+        self.ldproject.create_ai_config(
+            "ai-config--togglestore-triage",
+            "ToggleStore Triage Agent",
+            "Routes customer queries to the appropriate shopping specialist based on topic classification",
+            tags,
+            mode="agent"
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-triage",
+            "nova-pro-triage",
+            nova_pro_config_key,
+            "Nova Pro - Triage",
+            nova_pro_config,
+            instructions=triage_instructions,
+            description="Classifies shopping queries into specialist categories",
+        )
+        time.sleep(1)
+        self.ldproject.toggle_flag("ai-config--togglestore-triage", "on", "production")
+        triage_var_id = self.ldproject.get_ai_config_variation_id("ai-config--togglestore-triage", "nova-pro-triage")
+        if triage_var_id:
+            self.ldproject.update_ai_config_targeting("ai-config--togglestore-triage", "production", triage_var_id)
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-triage", "nova-pro-triage",
+            _tools("get-customer-context"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-triage",
+            "gpt5-mini-triage",
+            gpt5_mini_config_key,
+            "GPT-5 Mini - Triage",
+            gpt5_mini_config,
+            instructions=triage_instructions,
+            description="Lower-cost triage agent using GPT-5 Mini",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-triage", "gpt5-mini-triage",
+            _tools("get-customer-context"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-triage",
+            "sonnet-triage",
+            sonnet_config_key,
+            "Sonnet 4.6 - Triage",
+            sonnet_config,
+            instructions=triage_instructions,
+            description="Premium triage agent using Claude Sonnet 4.6",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-triage", "sonnet-triage",
+            _tools("get-customer-context"),
+        )
+        print("Created Triage Agent with 3 variations")
+
+        # -----------------------------------------------------------
+        # 2. Product Specialist
+        # -----------------------------------------------------------
+        product_instructions = (
+            "You are ToggleStore's Product Specialist. You have deep expertise in the ToggleStore product catalog including "
+            "apparel, accessories, and developer merchandise.\n\n"
+            "Customer context: {{ customer_context }}\n\n"
+            "Your responsibilities:\n"
+            "- Help customers find products by category, price, size, or style\n"
+            "- Provide detailed product information and comparisons\n"
+            "- Make personalized recommendations based on purchase history and preferences\n"
+            "- Check product availability and stock levels\n"
+            "- Explain product features, materials, and care instructions\n\n"
+            "Use the search-product-catalog tool to find products. Always be helpful, specific, and enthusiastic about the products.\n\n"
+            "The user's query is: {{ userInput }}"
+        )
+        self.ldproject.create_ai_config(
+            "ai-config--togglestore-product-specialist",
+            "ToggleStore Product Specialist",
+            "Expert in product catalog, recommendations, availability, and comparisons",
+            tags,
+            mode="agent"
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-product-specialist",
+            "nova-pro-product",
+            nova_pro_config_key,
+            "Nova Pro - Product",
+            nova_pro_config,
+            instructions=product_instructions,
+            description="Product specialist using Nova Pro",
+        )
+        time.sleep(1)
+        self.ldproject.toggle_flag("ai-config--togglestore-product-specialist", "on", "production")
+        product_var_id = self.ldproject.get_ai_config_variation_id("ai-config--togglestore-product-specialist", "nova-pro-product")
+        if product_var_id:
+            self.ldproject.update_ai_config_targeting("ai-config--togglestore-product-specialist", "production", product_var_id)
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-product-specialist", "nova-pro-product",
+            _tools("get-customer-context", "search-product-catalog"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-product-specialist",
+            "gpt5-mini-product",
+            gpt5_mini_config_key,
+            "GPT-5 Mini - Product",
+            gpt5_mini_config,
+            instructions=product_instructions,
+            description="Product specialist using GPT-5 Mini",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-product-specialist", "gpt5-mini-product",
+            _tools("get-customer-context", "search-product-catalog"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-product-specialist",
+            "sonnet-product",
+            sonnet_config_key,
+            "Sonnet 4.6 - Product",
+            sonnet_config,
+            instructions=product_instructions,
+            description="Product specialist using Claude Sonnet 4.6",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-product-specialist", "sonnet-product",
+            _tools("get-customer-context", "search-product-catalog"),
+        )
+        print("Created Product Specialist with 3 variations")
+
+        # -----------------------------------------------------------
+        # 3. Order & Returns Specialist
+        # -----------------------------------------------------------
+        order_instructions = (
+            "You are ToggleStore's Order & Returns Specialist. You handle all order-related inquiries including "
+            "tracking, returns, exchanges, refunds, and shipping issues.\n\n"
+            "Customer context: {{ customer_context }}\n\n"
+            "Your responsibilities:\n"
+            "- Look up order status and provide tracking information\n"
+            "- Process return and exchange requests\n"
+            "- Explain refund policies and timelines\n"
+            "- Handle shipping delays and lost package inquiries\n"
+            "- Assist with order modifications and cancellations\n\n"
+            "Use the check-order-status tool to look up orders. Be empathetic, clear, and solution-oriented.\n\n"
+            "The user's query is: {{ userInput }}"
+        )
+        self.ldproject.create_ai_config(
+            "ai-config--togglestore-order-specialist",
+            "ToggleStore Order & Returns Specialist",
+            "Handles order tracking, returns, exchanges, refunds, and shipping inquiries",
+            tags,
+            mode="agent"
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-order-specialist",
+            "nova-pro-order",
+            nova_pro_config_key,
+            "Nova Pro - Order",
+            nova_pro_config,
+            instructions=order_instructions,
+            description="Order specialist using Nova Pro",
+        )
+        time.sleep(1)
+        self.ldproject.toggle_flag("ai-config--togglestore-order-specialist", "on", "production")
+        order_var_id = self.ldproject.get_ai_config_variation_id("ai-config--togglestore-order-specialist", "nova-pro-order")
+        if order_var_id:
+            self.ldproject.update_ai_config_targeting("ai-config--togglestore-order-specialist", "production", order_var_id)
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-order-specialist", "nova-pro-order",
+            _tools("get-customer-context", "check-order-status"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-order-specialist",
+            "gpt5-mini-order",
+            gpt5_mini_config_key,
+            "GPT-5 Mini - Order",
+            gpt5_mini_config,
+            instructions=order_instructions,
+            description="Order specialist using GPT-5 Mini",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-order-specialist", "gpt5-mini-order",
+            _tools("get-customer-context", "check-order-status"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-order-specialist",
+            "sonnet-order",
+            sonnet_config_key,
+            "Sonnet 4.6 - Order",
+            sonnet_config,
+            instructions=order_instructions,
+            description="Order specialist using Claude Sonnet 4.6",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-order-specialist", "sonnet-order",
+            _tools("get-customer-context", "check-order-status"),
+        )
+        print("Created Order & Returns Specialist with 3 variations")
+
+        # -----------------------------------------------------------
+        # 4. Style & Sizing Advisor
+        # -----------------------------------------------------------
+        style_instructions = (
+            "You are ToggleStore's Style & Sizing Advisor. You help customers with outfit recommendations, "
+            "size selection, and style advice.\n\n"
+            "Customer context: {{ customer_context }}\n\n"
+            "Your responsibilities:\n"
+            "- Provide personalized size recommendations based on measurements and fit preferences\n"
+            "- Suggest outfit combinations and style pairings\n"
+            "- Advise on seasonal trends and must-have items\n"
+            "- Help with gift recommendations based on recipient preferences\n"
+            "- Compare fits across different product lines\n\n"
+            "Use the get-size-recommendation tool for sizing questions and search-product-catalog for finding matching items. "
+            "Be fashion-forward, encouraging, and specific with your recommendations.\n\n"
+            "The user's query is: {{ userInput }}"
+        )
+        self.ldproject.create_ai_config(
+            "ai-config--togglestore-style-advisor",
+            "ToggleStore Style & Sizing Advisor",
+            "Provides personalized style recommendations, sizing advice, and outfit suggestions",
+            tags,
+            mode="agent"
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-style-advisor",
+            "nova-pro-style",
+            nova_pro_config_key,
+            "Nova Pro - Style",
+            nova_pro_config,
+            instructions=style_instructions,
+            description="Style advisor using Nova Pro",
+        )
+        time.sleep(1)
+        self.ldproject.toggle_flag("ai-config--togglestore-style-advisor", "on", "production")
+        style_var_id = self.ldproject.get_ai_config_variation_id("ai-config--togglestore-style-advisor", "nova-pro-style")
+        if style_var_id:
+            self.ldproject.update_ai_config_targeting("ai-config--togglestore-style-advisor", "production", style_var_id)
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-style-advisor", "nova-pro-style",
+            _tools("get-customer-context", "search-product-catalog", "get-size-recommendation"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-style-advisor",
+            "gpt5-mini-style",
+            gpt5_mini_config_key,
+            "GPT-5 Mini - Style",
+            gpt5_mini_config,
+            instructions=style_instructions,
+            description="Style advisor using GPT-5 Mini",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-style-advisor", "gpt5-mini-style",
+            _tools("get-customer-context", "search-product-catalog", "get-size-recommendation"),
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-style-advisor",
+            "sonnet-style",
+            sonnet_config_key,
+            "Sonnet 4.6 - Style",
+            sonnet_config,
+            instructions=style_instructions,
+            description="Style advisor using Claude Sonnet 4.6",
+        )
+        self.ldproject.patch_variation_tools(
+            "ai-config--togglestore-style-advisor", "sonnet-style",
+            _tools("get-customer-context", "search-product-catalog", "get-size-recommendation"),
+        )
+        print("Created Style & Sizing Advisor with 3 variations")
+
+        # -----------------------------------------------------------
+        # 5. Brand Voice Agent
+        # -----------------------------------------------------------
+        brand_voice_instructions = (
+            "You are ToggleStore's Brand Voice agent. You receive a specialist's draft response and rewrite it "
+            "to match ToggleStore's brand personality.\n\n"
+            "Brand guidelines:\n"
+            "- Tone: Friendly, knowledgeable, and slightly playful — like a helpful friend who knows tech and fashion\n"
+            "- Voice: Confident but not arrogant, enthusiastic without being over-the-top\n"
+            "- Style: Use clear, concise language. Avoid jargon. Include relevant product details naturally\n"
+            "- Personality: Reference feature flags, toggles, and developer culture when appropriate\n"
+            "- Format: Use short paragraphs, bullet points for lists, and bold for product names\n\n"
+            "The specialist's draft response is: {{ draftResponse }}\n"
+            "The original user query was: {{ userInput }}\n\n"
+            "Rewrite the response to match ToggleStore's brand voice while preserving all factual information."
+        )
+        self.ldproject.create_ai_config(
+            "ai-config--togglestore-brand-voice",
+            "ToggleStore Brand Voice Agent",
+            "Rewrites specialist responses to match ToggleStore brand personality and tone",
+            tags,
+            mode="agent"
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-brand-voice",
+            "nova-pro-brand-voice",
+            nova_pro_config_key,
+            "Nova Pro - Brand Voice",
+            nova_pro_config,
+            instructions=brand_voice_instructions,
+            description="Brand voice using Nova Pro",
+        )
+        time.sleep(1)
+        self.ldproject.toggle_flag("ai-config--togglestore-brand-voice", "on", "production")
+        bv_var_id = self.ldproject.get_ai_config_variation_id("ai-config--togglestore-brand-voice", "nova-pro-brand-voice")
+        if bv_var_id:
+            self.ldproject.update_ai_config_targeting("ai-config--togglestore-brand-voice", "production", bv_var_id)
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-brand-voice",
+            "gpt5-mini-brand-voice",
+            gpt5_mini_config_key,
+            "GPT-5 Mini - Brand Voice",
+            gpt5_mini_config,
+            instructions=brand_voice_instructions,
+            description="Brand voice using GPT-5 Mini",
+        )
+        self.ldproject.create_ai_config_versions(
+            "ai-config--togglestore-brand-voice",
+            "sonnet-brand-voice",
+            sonnet_config_key,
+            "Sonnet 4.6 - Brand Voice",
+            sonnet_config,
+            instructions=brand_voice_instructions,
+            description="Brand voice using Claude Sonnet 4.6",
+        )
+        print("Created Brand Voice Agent with 3 variations")
+
+        # -----------------------------------------------------------
+        # 6. Agent Graph — visual topology in LD dashboard
+        # -----------------------------------------------------------
+        print("Creating ToggleStore Agent Graph...")
+        specialist_keys = [
+            "ai-config--togglestore-product-specialist",
+            "ai-config--togglestore-order-specialist",
+            "ai-config--togglestore-style-advisor",
+        ]
+        edges = []
+        for spec_key in specialist_keys:
+            short = spec_key.replace("ai-config--togglestore-", "").replace("-specialist", "").replace("-advisor", "")
+            edges.append({
+                "key": f"triage-to-{short}",
+                "sourceConfig": "ai-config--togglestore-triage",
+                "targetConfig": spec_key,
+            })
+            edges.append({
+                "key": f"{short}-to-brand-voice",
+                "sourceConfig": spec_key,
+                "targetConfig": "ai-config--togglestore-brand-voice",
+            })
+        self.ldproject.create_agent_graph(
+            "togglestore-shopping-pipeline",
+            "ToggleStore Shopping Pipeline",
+            "Multi-agent pipeline: Triage routes to Product/Order/Style specialists, Brand Voice rewrites final output",
+            edges,
+            root_config_key="ai-config--togglestore-triage",
+        )
+        print("Done creating agent graph")
+
+    def run_brand_voice_model_experiment(self):
+        """Create a model comparison experiment on the Brand Voice agent."""
+        if not self.ai_config_created:
+            print("Error: AI configs not created, skipping Brand Voice experiment")
+            return
+        print("Creating Brand Voice Model Comparison Experiment...")
+        self.create_brand_voice_experiment()
+        self.ldproject.start_exp_iteration("brand-voice-model-comparison", "production")
+        print("Brand Voice Model Comparison Experiment started")
+
+    def create_brand_voice_experiment(self):
+        metrics = [
+            self.ldproject.exp_metric("ai-accuracy", False),
+            self.ldproject.exp_metric("ai-source-fidelity", False),
+            self.ldproject.exp_metric("ai-relevance", False),
+            self.ldproject.exp_metric("ai-cost", False),
+            self.ldproject.exp_metric("ai-chatbot-negative-feedback", False),
+        ]
+        res = self.ldproject.create_experiment(
+            "brand-voice-model-comparison",
+            "Brand Voice Model Comparison: Multi-Agent Prompt Impact",
+            "production",
+            "ai-config--togglestore-brand-voice",
+            "Compares Nova Pro, GPT-5 Mini, and Claude Sonnet 4.6 powering the Brand Voice agent in the multi-agent pipeline. Measures accuracy, source fidelity, relevance, cost, and user feedback to determine which model delivers the best brand-consistent responses.",
+            metrics=metrics,
+            primary_key="ai-accuracy",
+            attributes=["device", "location", "tier", "operating_system"],
+            flagConfigVersion=1,
+        )
 
 ############################################################################################################
 

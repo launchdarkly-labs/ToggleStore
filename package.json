@@ -7,7 +7,8 @@
     "dev:togglestore": "next dev --hostname togglestore.app",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "upload-sourcemaps": "ldcli sourcemaps upload --project-key $NEXT_PUBLIC_PROJECT_KEY --environment production --source-map-directory .next/static"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.941.0",
@@ -16,11 +17,8 @@
     "@launchdarkly/browser-telemetry": "^1.0.11",
     "@launchdarkly/node-server-sdk": "^9.10.2",
     "@launchdarkly/observability": "^0.4.9",
-    "@launchdarkly/observability-node": "^0.3.1",
-    "@launchdarkly/server-sdk-ai": "0.15.0",
-    "@launchdarkly/server-sdk-ai-langchain": "0.4.0",
-    "@launchdarkly/server-sdk-ai-openai": "0.4.0",
-    "@launchdarkly/server-sdk-ai-vercel": "0.4.0",
+    "@launchdarkly/observability-node": "^1.1.1",
+    "@launchdarkly/server-sdk-ai": "^0.20.0",
     "@launchdarkly/session-replay": "^0.4.7",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-avatar": "^1.1.10",
