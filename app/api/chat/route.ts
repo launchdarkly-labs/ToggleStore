@@ -2,6 +2,7 @@ import { NextRequest } from "next/server"
 import { getLDServerClient } from "@/lib/launchdarkly/server"
 import { LD_CONTEXT_COOKIE_KEY } from "@/lib/constants"
 import { initAi, LDTokenUsage } from "@launchdarkly/server-sdk-ai"
+import { LDObserve } from "@launchdarkly/observability-node"
 import { logger } from "@/lib/logger"
 import { recordErrorToLD } from "@/lib/launchdarkly/observability-server"
 import { v4 as uuidv4 } from "uuid"
@@ -181,6 +182,12 @@ export async function POST(request: NextRequest) {
     // Initialize AI client
     const aiClient = initAi(ldClient)
 
+    // Extract request headers for trace propagation
+    const reqHeaders: Record<string, string> = {}
+    request.headers.forEach((value, key) => {
+      reqHeaders[key] = value
+    })
+
     // Prepare product details - use provided productDetails or load from JSON
     // Format products for AI context (simplified structure with key info)
     const formattedProducts =
@@ -230,7 +237,7 @@ export async function POST(request: NextRequest) {
         const stream = new ReadableStream({
           async start(controller) {
             try {
-              const pipelineResult = await runMultiAgentPipeline(
+              const runPipeline = () => runMultiAgentPipeline(
                 {
                   userInput,
                   customerContext: {},
@@ -240,6 +247,7 @@ export async function POST(request: NextRequest) {
                   }>,
                   cartDetails: formattedCartDetails,
                   ldContext: context,
+                  requestHeaders: reqHeaders,
                 },
                 (status: string) => {
                   const statusData = JSON.stringify({ status, done: false })
@@ -248,6 +256,20 @@ export async function POST(request: NextRequest) {
                   )
                 }
               )
+
+              const pipelineResult = typeof LDObserve?.runWithHeaders === "function"
+                ? await LDObserve.runWithHeaders(
+                    "POST - /api/chat",
+                    reqHeaders,
+                    () => {
+                      LDObserve.setAttributes({
+                        "feature_flag.key": aiConfigKey,
+                        "feature_flag.provider.name": "LaunchDarkly",
+                      })
+                      return runPipeline()
+                    }
+                  )
+                : await runPipeline()
 
               // Stream the final response word by word for smooth UX
               const words = pipelineResult.finalResponse.split(" ")
@@ -358,6 +380,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Single-Model Fallback (original behavior) ──
+    // Link this trace to the AI Config so it shows in the monitoring tab
+    if (typeof LDObserve?.setAttributes === "function") {
+      LDObserve.setAttributes({
+        "feature_flag.key": aiConfigKey,
+        "feature_flag.provider.name": "LaunchDarkly",
+      })
+    }
+
     const templateVariables = {
       userInput: userInput,
       chatHistory: chatHistory,

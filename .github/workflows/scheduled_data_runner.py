@@ -264,6 +264,8 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
     question_pool = SHOPPING_QUESTIONS
     use_llm = OPENAI_AVAILABLE and bool(os.getenv("OPENAI_API_KEY"))
 
+    max_trace_iterations = 30
+
     for i in range(num_iterations):
         try:
             ctx = generate_user_context()
@@ -302,17 +304,26 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
 
                 # --- Node 1: Triage ---
                 triage_key = root_node.get_key()
-                triage_cfg = root_node.get_config()
-                triage_model = triage_cfg.model.name if triage_cfg.model else "unknown"
+                triage_model = "unknown"
+                try:
+                    tc = root_node.get_config()
+                    triage_model = tc.model.name if tc.model else "unknown"
+                except Exception:
+                    pass
+
+                make_traces = use_llm and i < max_trace_iterations
 
                 with safe_span(tracer, "agent.triage", attributes={
                     "gen_ai.system": "togglestore",
                     "gen_ai.request.model": triage_model,
                     "agent.name": triage_key,
                     "agent.role": "triage",
+                    "feature_flag.key": triage_key,
+                    "feature_flag.provider.name": "LaunchDarkly",
                 }) as triage_span:
+                    triage_cfg = root_node.get_config()
                     t = triage_cfg.create_tracker()
-                    if use_llm:
+                    if make_traces:
                         _make_llm_call("triage", question)
                     triage_dur = random.randint(200, 800)
                     triage_pt = random.randint(50, 150)
@@ -336,18 +347,25 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                 spec_dur = 0
 
                 if specialist_node is not None:
-                    spec_cfg = specialist_node.get_config()
-                    spec_model = spec_cfg.model.name if spec_cfg.model else "unknown"
+                    spec_model = "unknown"
+                    try:
+                        sc = specialist_node.get_config()
+                        spec_model = sc.model.name if sc.model else "unknown"
+                    except Exception:
+                        pass
 
                     with safe_span(tracer, "agent.specialist", attributes={
                         "gen_ai.system": "togglestore",
                         "gen_ai.request.model": spec_model,
                         "agent.name": specialist_key,
                         "agent.role": "specialist",
+                        "feature_flag.key": specialist_key,
+                        "feature_flag.provider.name": "LaunchDarkly",
                     }) as spec_span:
+                        spec_cfg = specialist_node.get_config()
                         st = spec_cfg.create_tracker()
                         spec_response = ""
-                        if use_llm:
+                        if make_traces:
                             resp, _ = _make_llm_call("specialist", question)
                             spec_response = resp or ""
                         dur_min, dur_max = spec_profile["duration_range"]
@@ -374,17 +392,24 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                 brand_dur = 0
 
                 if brand_node is not None:
-                    brand_cfg = brand_node.get_config()
-                    brand_model = brand_cfg.model.name if brand_cfg.model else "unknown"
+                    brand_model = "unknown"
+                    try:
+                        bc = brand_node.get_config()
+                        brand_model = bc.model.name if bc.model else "unknown"
+                    except Exception:
+                        pass
 
                     with safe_span(tracer, "agent.brand-voice", attributes={
                         "gen_ai.system": "togglestore",
                         "gen_ai.request.model": brand_model,
                         "agent.name": brand_key,
                         "agent.role": "brand-voice",
+                        "feature_flag.key": brand_key,
+                        "feature_flag.provider.name": "LaunchDarkly",
                     }) as brand_span:
+                        brand_cfg = brand_node.get_config()
                         bt = brand_cfg.create_tracker()
-                        if use_llm:
+                        if make_traces:
                             _make_llm_call("brand-voice", question, response=spec_response if specialist_node else "")
                         brand_dur = random.randint(300, 1500)
                         brand_pt = random.randint(200, 500)

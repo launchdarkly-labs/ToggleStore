@@ -1,4 +1,5 @@
 import { initAi, LDTokenUsage } from "@launchdarkly/server-sdk-ai"
+import { LDObserve } from "@launchdarkly/observability-node"
 import {
   BedrockRuntimeClient,
   ConverseCommand,
@@ -17,6 +18,7 @@ export interface AgentContext {
   chatHistory: Array<{ role: string; content: string }>
   cartDetails?: Record<string, unknown> | null
   ldContext: Record<string, unknown>
+  requestHeaders?: Record<string, string>
 }
 
 export interface AgentResult {
@@ -224,7 +226,8 @@ async function runAgent(
   aiConfigKey: string,
   ldContext: Record<string, unknown>,
   templateVars: Record<string, unknown>,
-  bedrockClient: BedrockRuntimeClient
+  bedrockClient: BedrockRuntimeClient,
+  options?: { agentLabel?: string; requestHeaders?: Record<string, string> }
 ): Promise<AgentResult> {
   const ldClient = await getLDServerClient()
   const aiClient = initAi(ldClient)
@@ -262,12 +265,22 @@ async function runAgent(
     (templateVars.userInput as string) ||
     ""
 
-  const llmResult = await invokeLLM(
-    aiConfig.model.name,
-    effectiveSystem,
-    userPrompt,
-    bedrockClient
-  )
+  const modelName = aiConfig.model.name
+  const spanName = options?.agentLabel ? `chat.${options.agentLabel}` : "chat"
+  const headers = options?.requestHeaders ?? {}
+  const doLLMCall = () => invokeLLM(modelName, effectiveSystem, userPrompt, bedrockClient)
+
+  const llmResult = typeof LDObserve?.runWithHeaders === "function"
+    ? await LDObserve.runWithHeaders(spanName, headers, () => {
+        LDObserve.setAttributes({
+          "feature_flag.key": aiConfigKey,
+          "feature_flag.provider.name": "LaunchDarkly",
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": modelName,
+        })
+        return doLLMCall()
+      })
+    : await doLLMCall()
 
   const durationMs = Date.now() - startTime
 
@@ -301,6 +314,13 @@ export async function runMultiAgentPipeline(
 ): Promise<PipelineResult> {
   const pipelineStart = Date.now()
 
+  if (typeof LDObserve?.setAttributes === "function") {
+    LDObserve.setAttributes({
+      "feature_flag.key": AGENT_KEYS.triage,
+      "feature_flag.provider.name": "LaunchDarkly",
+    })
+  }
+
   const region =
     process.env.AWS_DEFAULT_REGION ?? process.env.AWS_REGION ?? "us-west-2"
   const bedrockClient = new BedrockRuntimeClient({ region })
@@ -318,7 +338,8 @@ export async function runMultiAgentPipeline(
       customer_context: JSON.stringify(customerContext),
       chatHistory: ctx.chatHistory,
     },
-    bedrockClient
+    bedrockClient,
+    { agentLabel: "triage", requestHeaders: ctx.requestHeaders }
   )
 
   let category = "general"
@@ -377,7 +398,8 @@ export async function runMultiAgentPipeline(
         sizes: p.sizes || [],
       })),
     },
-    bedrockClient
+    bedrockClient,
+    { agentLabel: `specialist_${specialistKey}`, requestHeaders: ctx.requestHeaders }
   )
 
   // ── Step 3: Brand Voice ──
@@ -391,7 +413,8 @@ export async function runMultiAgentPipeline(
       draftResponse: specialistResult.content,
       customer_context: JSON.stringify(customerContext),
     },
-    bedrockClient
+    bedrockClient,
+    { agentLabel: "brand_voice", requestHeaders: ctx.requestHeaders }
   )
 
   const totalDurationMs = Date.now() - pipelineStart
