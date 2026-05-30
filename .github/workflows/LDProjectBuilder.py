@@ -37,6 +37,7 @@ class ToggleStoreBuilder:
         self.create_metric_groups()
         self.create_flags()
         self.update_add_userid_to_flags()
+        self.create_prompt_snippets()
         self.create_ai_config()
         self.enable_csa_shadow_ai_feature_flags()
         self.create_and_run_experiments()
@@ -176,6 +177,68 @@ class ToggleStoreBuilder:
         
         print("Done")
         self.flags_created = True
+
+############################################################################################################
+
+    # Create Prompt Snippets
+    def create_prompt_snippets(self):
+        """Create reusable prompt snippets in the AI Configs Library."""
+        print("Creating Prompt Snippets...")
+
+        self.ldproject.create_snippet(
+            key="togglestore-brand-guidelines",
+            name="ToggleStore Brand Guidelines",
+            text=(
+                "Brand guidelines:\n"
+                "- Tone: Friendly, knowledgeable, and slightly playful — like a helpful friend who knows tech and fashion\n"
+                "- Voice: Confident but not arrogant, enthusiastic without being over-the-top\n"
+                "- Style: Use clear, concise language. Avoid jargon. Include relevant product details naturally\n"
+                "- Personality: Reference feature flags, toggles, and developer culture when appropriate\n"
+                "- Format: Use short paragraphs, bullet points for lists, and bold for product names"
+            ),
+            description="Shared brand voice and tone guidelines used across all ToggleStore agents",
+            tags=["brand", "togglestore", "shared"],
+        )
+        time.sleep(0.5)
+
+        self.ldproject.create_snippet(
+            key="togglestore-product-catalog",
+            name="ToggleStore Product Catalog",
+            text=(
+                "ToggleStore product catalog includes:\n"
+                "- Toggle Float: Inflatable pool float shaped like a toggle switch ($24.99)\n"
+                "- Developer Shoes: Sleek dark shoes with LaunchDarkly branding, US sizes 7-13\n"
+                "- Feature Flag Socks: Combed cotton socks with toggle switch patterns, one size fits most\n"
+                "- Code & Coffee Mug: 12oz ceramic matte black mug ($14.99)\n"
+                "- LD Watch: Minimalist timepiece with dark face, silicone band, water-resistant to 30m\n"
+                "- Bucket Hat: 100% cotton twill with embroidered logo, adjustable drawstring\n"
+                "- Launch Rocket: 8-inch collectible desk toy made from resin\n"
+                "- LDVR Headset: Novelty VR headset desk piece (not functional)\n"
+                "- Toggle Mask: Three-layer breathable face mask with adjustable ear loops\n"
+                "- LD Skateboard Deck: 8.25-inch 7-ply Canadian maple deck with custom graphic"
+            ),
+            description="Reference catalog of all ToggleStore products with key details",
+            tags=["products", "togglestore", "shared"],
+        )
+        time.sleep(0.5)
+
+        self.ldproject.create_snippet(
+            key="togglestore-response-format",
+            name="ToggleStore Response Format",
+            text=(
+                "Response formatting rules:\n"
+                "- Keep responses under 200 words unless the customer asks for detailed information\n"
+                "- Use bullet points for lists of 3+ items\n"
+                "- Bold product names on first mention\n"
+                "- Include prices when mentioning specific products\n"
+                "- End with a follow-up question or call-to-action when appropriate\n"
+                "- Never make up product information — only reference items from the catalog"
+            ),
+            description="Shared response formatting rules for all ToggleStore specialist agents",
+            tags=["format", "togglestore", "shared"],
+        )
+
+        print("Prompt Snippets created.")
 
 ############################################################################################################
    
@@ -1624,6 +1687,8 @@ class ToggleStoreBuilder:
         product_instructions = (
             "You are ToggleStore's Product Specialist. You have deep expertise in the ToggleStore product catalog including "
             "apparel, accessories, and developer merchandise.\n\n"
+            "{{snippet.togglestore-product-catalog#1}}\n\n"
+            "{{snippet.togglestore-response-format#1}}\n\n"
             "Customer context: {{ customer_context }}\n\n"
             "Your responsibilities:\n"
             "- Help customers find products by category, price, size, or style\n"
@@ -1762,6 +1827,8 @@ class ToggleStoreBuilder:
         style_instructions = (
             "You are ToggleStore's Style & Sizing Advisor. You help customers with outfit recommendations, "
             "size selection, and style advice.\n\n"
+            "{{snippet.togglestore-product-catalog#1}}\n\n"
+            "{{snippet.togglestore-response-format#1}}\n\n"
             "Customer context: {{ customer_context }}\n\n"
             "Your responsibilities:\n"
             "- Provide personalized size recommendations based on measurements and fit preferences\n"
@@ -1832,12 +1899,7 @@ class ToggleStoreBuilder:
         brand_voice_instructions = (
             "You are ToggleStore's Brand Voice agent. You receive a specialist's draft response and rewrite it "
             "to match ToggleStore's brand personality.\n\n"
-            "Brand guidelines:\n"
-            "- Tone: Friendly, knowledgeable, and slightly playful — like a helpful friend who knows tech and fashion\n"
-            "- Voice: Confident but not arrogant, enthusiastic without being over-the-top\n"
-            "- Style: Use clear, concise language. Avoid jargon. Include relevant product details naturally\n"
-            "- Personality: Reference feature flags, toggles, and developer culture when appropriate\n"
-            "- Format: Use short paragraphs, bullet points for lists, and bold for product names\n\n"
+            "{{snippet.togglestore-brand-guidelines#1}}\n\n"
             "The specialist's draft response is: {{ draftResponse }}\n"
             "The original user query was: {{ userInput }}\n\n"
             "Rewrite the response to match ToggleStore's brand voice while preserving all factual information."

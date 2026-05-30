@@ -2469,6 +2469,46 @@ class LDPlatform:
         return response
 
     ##################################################
+    # Create Prompt Snippet (AI Config Library)
+    ##################################################
+
+    def create_snippet(self, key, name, text, description=None, tags=None):
+        """Create a reusable prompt snippet in the AI Configs Library."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+        }
+
+        payload = {
+            "key": key,
+            "name": name,
+            "text": text,
+        }
+        if description:
+            payload["description"] = description
+        if tags:
+            payload["tags"] = tags
+
+        response = self.getrequest(
+            "POST",
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/ai-configs/prompt-snippets",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code in (200, 201):
+            data = json.loads(response.text)
+            version = data.get("version", 1)
+            print(f"Created snippet: {name} (key: {key}, version: {version})")
+            return data
+        elif response.status_code == 409:
+            print(f"Snippet '{key}' already exists, skipping")
+            return {"key": key, "version": 1}
+        else:
+            print(f"Error creating snippet '{key}': {response.status_code} {response.text[:300]}")
+            return None
+
+    ##################################################
     # Upload dataset for Playgrounds / Offline Evals
     ##################################################
 
