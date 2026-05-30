@@ -42,6 +42,8 @@ class ToggleStoreBuilder:
         self.create_and_run_experiments()
         self.create_and_run_layer()
         self.create_and_run_holdout()
+        self.upload_playground_datasets()
+        self.create_playgrounds()
         self.project_settings()
         
         # Prepare environment variables for the subprocess
@@ -1941,6 +1943,166 @@ class ToggleStoreBuilder:
             attributes=["device", "location", "tier", "operating_system"],
             flagConfigVersion=1,
         )
+
+    ##################################################
+    # Upload Playground Datasets
+    ##################################################
+
+    def upload_playground_datasets(self):
+        """Upload evaluation datasets for Playgrounds / offline evaluations."""
+        print("Uploading Playground datasets...")
+
+        datasets_dir = os.path.join(os.path.dirname(__file__), "datasets")
+
+        dataset_files = {
+            "ToggleStore Triage Agent Eval": "triage_agent_eval.csv",
+            "ToggleStore Product Specialist Eval": "product_specialist_eval.csv",
+            "ToggleStore Order & Returns Eval": "order_returns_specialist_eval.csv",
+            "ToggleStore Style & Sizing Eval": "style_sizing_advisor_eval.csv",
+            "ToggleStore Brand Voice Eval": "brand_voice_eval.csv",
+        }
+
+        uploaded_datasets = {}
+        for dataset_name, filename in dataset_files.items():
+            filepath = os.path.join(datasets_dir, filename)
+            if not os.path.exists(filepath):
+                print(f"  Warning: dataset file not found: {filepath}")
+                continue
+
+            with open(filepath, "r", encoding="utf-8") as f:
+                csv_content = f.read()
+
+            dataset_id = self.ldproject.upload_dataset(dataset_name, csv_content, filename)
+            if dataset_id:
+                print(f"  ✓ {dataset_name} (id: {dataset_id})")
+                uploaded_datasets[dataset_name] = dataset_id
+            else:
+                print(f"  ✗ Failed to upload {dataset_name}")
+            time.sleep(1)
+
+        print("Playground datasets upload complete.")
+        return uploaded_datasets
+
+    ##################################################
+    # Create Playgrounds (Evaluations + Playgrounds)
+    ##################################################
+
+    def create_playgrounds(self):
+        """Create Evaluations and Playgrounds for each ToggleStore agent."""
+        print("Creating Playgrounds...")
+
+        agents = [
+            {
+                "name": "Triage Agent",
+                "provider": "OpenAI",
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "You are a shopping query classifier for ToggleStore. "
+                        "Classify the customer's query into exactly one category.\n\n"
+                        "Categories:\n"
+                        "- products: Product questions, catalog browsing, pricing, availability, features\n"
+                        "- orders: Order tracking, returns, exchanges, shipping, cancellations\n"
+                        "- style: Outfit recommendations, sizing advice, gift suggestions, styling tips\n\n"
+                        "Return ONLY a JSON object: "
+                        "{\"category\": \"<key>\", \"confidence\": <0-1>, \"reasoning\": \"<one sentence>\"}"
+                    )},
+                    {"role": "user", "content": "{{input}}"},
+                ],
+            },
+            {
+                "name": "Product Specialist",
+                "provider": "OpenAI",
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "You are ToggleStore's Product Specialist with expertise in the full product catalog "
+                        "including the Toggle Float, Developer Shoes, Feature Flag Socks, Code & Coffee Mug, "
+                        "LD Watch, Bucket Hat, Launch Rocket, LDVR Headset, and Toggle Mask.\n\n"
+                        "Answer the customer's question thoroughly and accurately. "
+                        "Keep your response factual, helpful, and under 200 words."
+                    )},
+                    {"role": "user", "content": "{{input}}"},
+                ],
+            },
+            {
+                "name": "Order & Returns Specialist",
+                "provider": "OpenAI",
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "You are ToggleStore's Order & Returns Specialist with expertise in order tracking, "
+                        "shipping, returns, exchanges, refunds, and delivery issues.\n\n"
+                        "Answer the customer's question thoroughly and accurately. "
+                        "Keep your response factual, helpful, and under 200 words."
+                    )},
+                    {"role": "user", "content": "{{input}}"},
+                ],
+            },
+            {
+                "name": "Style & Sizing Advisor",
+                "provider": "OpenAI",
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "You are ToggleStore's Style & Sizing Advisor with expertise in outfit recommendations, "
+                        "size guidance, gift suggestions, and styling tips for all ToggleStore products.\n\n"
+                        "Answer the customer's question thoroughly and accurately. "
+                        "Keep your response factual, helpful, and under 200 words."
+                    )},
+                    {"role": "user", "content": "{{input}}"},
+                ],
+            },
+            {
+                "name": "Brand Voice",
+                "provider": "OpenAI",
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": (
+                        "You are ToggleStore's Brand Voice editor. Rewrite the specialist's response "
+                        "to match ToggleStore's fun, developer-friendly, and approachable brand voice.\n\n"
+                        "Guidelines:\n"
+                        "- Address the customer directly using \"you\" / \"your\"\n"
+                        "- Be enthusiastic but genuine — avoid over-the-top language\n"
+                        "- Maintain ALL factual content from the original response\n"
+                        "- Do NOT add any information that wasn't in the original response"
+                    )},
+                    {"role": "user", "content": "{{input}}"},
+                ],
+            },
+        ]
+
+        default_criteria = []
+
+        for agent in agents:
+            eval_name = f"ToggleStore {agent['name']} Eval"
+            playground_name = f"ToggleStore {agent['name']} Playground"
+
+            eval_id = self.ldproject.create_evaluation(
+                name=eval_name,
+                generation_provider=agent["provider"],
+                generation_model=agent["model"],
+                messages=agent["messages"],
+                criteria=default_criteria,
+                variables={"input": "default value"},
+                parameters={},
+            )
+
+            if not eval_id:
+                print(f"  ✗ Failed to create evaluation for {agent['name']}")
+                continue
+
+            print(f"  ✓ Evaluation: {eval_name} (id: {eval_id})")
+
+            playground_id = self.ldproject.create_playground(playground_name, [eval_id])
+            if playground_id:
+                print(f"  ✓ Playground: {playground_name} (id: {playground_id})")
+            else:
+                print(f"  ✗ Failed to create playground for {agent['name']}")
+
+            time.sleep(1)
+
+        print("Playgrounds creation complete.")
 
 ############################################################################################################
 

@@ -18,6 +18,7 @@ env:
   DEMO_NAMESPACE: ${{ github.event.inputs.name }}
   LD_PROJECT_KEY: ${{ github.event.inputs.name }}-togglestore
   LD_API_KEY: ${{ secrets.LD_API_KEY }}
+  LD_EAP_API_KEY: ${{ secrets.LD_EAP_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EKS_POD_IDENTITY_ROLE_ARN: ${{ secrets.EKS_POD_IDENTITY_ROLE_ARN }}
 
@@ -47,7 +48,7 @@ jobs:
           echo "Creating and Setting up LaunchDarkly project for namespace: ${{ env.DEMO_NAMESPACE }}"
           python ./.github/workflows/LDProjectBuilder.py
         env:
-          LD_API_KEY: ${{ env.LD_API_KEY }}
+          LD_API_KEY: ${{ env.LD_EAP_API_KEY != '' && env.LD_EAP_API_KEY || env.LD_API_KEY }}
           LD_API_KEY_USER: ${{ env.LD_API_KEY_USER }}
           LD_PROJECT_KEY: ${{ env.LD_PROJECT_KEY }}
           DEMO_NAMESPACE: ${{ env.DEMO_NAMESPACE }}
