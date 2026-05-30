@@ -10,9 +10,23 @@ from dotenv import load_dotenv
 import random
 import time
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from ldai.client import LDAIClient
 from ldai.tracker import TokenUsage, FeedbackKind
+
+try:
+    from ldobserve import ObservabilityConfig, ObservabilityPlugin
+    from opentelemetry import trace
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 load_dotenv()
 
@@ -823,20 +837,83 @@ TRIAGE_ROUTES = {
 }
 
 
+def _get_tracer():
+    """Get an OpenTelemetry tracer for agent graph spans."""
+    if not OBSERVABILITY_AVAILABLE:
+        return None
+    try:
+        return trace.get_tracer("togglestore.agent-graph", "1.0.0")
+    except Exception:
+        return None
+
+
+AGENT_PROMPTS = {
+    "triage": "Classify this customer query into one category: product, order, or style. Query: '{question}'. Reply with just the category.",
+    "specialist": "As a shopping assistant, give a one-sentence answer to: '{question}'",
+    "brand-voice": "Rewrite this in a friendly brand voice: '{response}'",
+}
+
+
+def _make_llm_call(role, question, response="", model_name=None):
+    """Make a small real OpenAI call for trace generation. Returns (text, tokens_dict)."""
+    if not OPENAI_AVAILABLE or not os.getenv("OPENAI_API_KEY"):
+        return None, {"input": 0, "output": 0}
+    try:
+        client = OpenAI()
+        prompt = AGENT_PROMPTS.get(role, "Say 'ok'").format(question=question, response=response)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=30,
+            temperature=0.7,
+        )
+        text = resp.choices[0].message.content or ""
+        usage = resp.usage
+        tokens = {
+            "input": usage.prompt_tokens if usage else 0,
+            "output": usage.completion_tokens if usage else 0,
+        }
+        return text, tokens
+    except Exception as e:
+        logging.debug(f"LLM call failed ({role}): {e}")
+        return None, {"input": 0, "output": 0}
+
+
+@contextmanager
+def _safe_span(tracer, name, **kwargs):
+    """Create a span, falling back to a no-op if tracing is unavailable."""
+    if tracer is None:
+        class _NoOp:
+            def set_attribute(self, k, v): pass
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        yield _NoOp()
+        return
+    try:
+        with tracer.start_as_current_span(name, **kwargs) as span:
+            yield span
+    except Exception:
+        class _NoOp:
+            def set_attribute(self, k, v): pass
+        yield _NoOp()
+
+
 def agent_graph_results_generator(client, num_iterations=500):
-    """Generate synthetic agent graph data.
+    """Generate synthetic agent graph data with OTel traces.
     
-    Uses the AI SDK's agent_graph() to resolve the graph, then records
-    per-node metrics (via config trackers) and graph-level metrics (via
-    graph tracker) to populate the Agent Graph dashboard.
+    Uses the AI SDK's agent_graph() to resolve the graph, records per-node
+    metrics (via config trackers), graph-level metrics (via graph tracker),
+    and creates OpenTelemetry spans that become traces in the LD monitoring tab.
     """
     aiclient = LDAIClient(client)
+    tracer = _get_tracer()
     
     if not client.is_initialized():
         logging.error("Failed to initialize LaunchDarkly client for agent graph generation")
         return
     
-    logging.info(f"Starting agent graph results generation ({num_iterations} iterations)...")
+    use_llm = OPENAI_AVAILABLE and bool(os.getenv("OPENAI_API_KEY"))
+    logging.info(f"Starting agent graph results generation ({num_iterations} iterations, traces={'enabled' if tracer else 'disabled'}, llm={'enabled' if use_llm else 'disabled'})...")
     
     for i in range(num_iterations):
         try:
@@ -862,100 +939,155 @@ def agent_graph_results_generator(client, num_iterations=500):
             total_tokens_out = 0
             graph_start = time.time()
             
-            # --- Node 1: Triage ---
-            triage_config = root_node.get_config()
-            triage_tracker = triage_config.create_tracker()
-            triage_key = root_node.get_key()
-            
-            triage_dur = random.randint(200, 800)
-            triage_prompt = random.randint(50, 150)
-            triage_completion = random.randint(30, 100)
-            
-            triage_tracker.track_duration(triage_dur)
-            triage_tracker.track_tokens(TokenUsage(triage_prompt, triage_completion, triage_prompt + triage_completion))
-            triage_tracker.track_time_to_first_token(random.randint(30, min(80, triage_dur)))
-            triage_tracker.track_success()
-            
-            total_tokens_in += triage_prompt
-            total_tokens_out += triage_completion
-            
-            # Pick a specialist route based on weighted probabilities
             specialist_key = random.choices(
                 list(TRIAGE_ROUTES.keys()),
                 weights=list(TRIAGE_ROUTES.values()),
                 k=1,
             )[0]
             
-            # --- Node 2: Specialist ---
-            specialist_node = graph.get_node(specialist_key)
-            spec_profile = MULTI_AGENT_PROFILES.get(specialist_key, MULTI_AGENT_PROFILES["ai-config--togglestore-product-specialist"])
+            with _safe_span(tracer, "togglestore.agent-pipeline", attributes={
+                "gen_ai.system": "togglestore",
+                "gen_ai.operation.name": "agent-graph",
+                "agent.graph_key": AGENT_GRAPH_KEY,
+                "agent.question": question,
+            }) as pipeline_span:
             
-            if specialist_node is not None:
-                spec_config = specialist_node.get_config()
-                spec_tracker = spec_config.create_tracker()
+                # --- Node 1: Triage ---
+                triage_config = root_node.get_config()
+                triage_key = root_node.get_key()
+                triage_model = triage_config.model.name if triage_config.model else "unknown"
                 
-                dur_min, dur_max = spec_profile["duration_range"]
-                spec_dur = random.randint(dur_min, dur_max)
-                pt_min, pt_max = spec_profile["prompt_tokens_range"]
-                ct_min, ct_max = spec_profile["completion_tokens_range"]
-                spec_prompt = random.randint(pt_min, pt_max)
-                spec_completion = random.randint(ct_min, ct_max)
+                with _safe_span(tracer, "agent.triage", attributes={
+                    "gen_ai.system": "togglestore",
+                    "gen_ai.request.model": triage_model,
+                    "agent.name": triage_key,
+                    "agent.role": "triage",
+                }) as triage_span:
+                    triage_tracker = triage_config.create_tracker()
+                    
+                    if use_llm:
+                        _make_llm_call("triage", question)
+                    
+                    triage_dur = random.randint(200, 800)
+                    triage_prompt = random.randint(50, 150)
+                    triage_completion = random.randint(30, 100)
+                    
+                    triage_tracker.track_duration(triage_dur)
+                    triage_tracker.track_tokens(TokenUsage(triage_prompt, triage_completion, triage_prompt + triage_completion))
+                    triage_tracker.track_time_to_first_token(random.randint(30, min(80, triage_dur)))
+                    triage_tracker.track_success()
+                    
+                    total_tokens_in += triage_prompt
+                    total_tokens_out += triage_completion
+                    triage_span.set_attribute("gen_ai.usage.input_tokens", triage_prompt)
+                    triage_span.set_attribute("gen_ai.usage.output_tokens", triage_completion)
+                    triage_span.set_attribute("agent.duration_ms", triage_dur)
+                    triage_span.set_attribute("agent.routed_to", specialist_key)
                 
-                spec_tracker.track_duration(spec_dur)
-                spec_tracker.track_tokens(TokenUsage(spec_prompt, spec_completion, spec_prompt + spec_completion))
-                spec_tracker.track_time_to_first_token(random.randint(40, max(50, spec_dur // 4)))
-                spec_tracker.track_success()
-                
-                total_tokens_in += spec_prompt
-                total_tokens_out += spec_completion
-                
-                graph_tracker.track_handoff_success(triage_key, specialist_key)
-            else:
+                # --- Node 2: Specialist ---
+                specialist_node = graph.get_node(specialist_key)
+                spec_profile = MULTI_AGENT_PROFILES.get(specialist_key, MULTI_AGENT_PROFILES["ai-config--togglestore-product-specialist"])
                 spec_dur = 0
-                specialist_key = triage_key
-            
-            # --- Node 3: Brand Voice ---
-            brand_key = "ai-config--togglestore-brand-voice"
-            brand_node = graph.get_node(brand_key)
-            
-            execution_path = [triage_key, specialist_key]
-            
-            if brand_node is not None:
-                brand_config = brand_node.get_config()
-                brand_tracker = brand_config.create_tracker()
                 
-                brand_dur = random.randint(300, 1500)
-                brand_prompt = random.randint(200, 500)
-                brand_completion = random.randint(150, 600)
-                
-                brand_tracker.track_duration(brand_dur)
-                brand_tracker.track_tokens(TokenUsage(brand_prompt, brand_completion, brand_prompt + brand_completion))
-                brand_tracker.track_time_to_first_token(random.randint(30, max(50, brand_dur // 5)))
-                brand_tracker.track_success()
-                
-                if random.random() < 0.78:
-                    brand_tracker.track_feedback({"kind": FeedbackKind.Positive})
+                if specialist_node is not None:
+                    spec_config = specialist_node.get_config()
+                    spec_model = spec_config.model.name if spec_config.model else "unknown"
+                    
+                    with _safe_span(tracer, "agent.specialist", attributes={
+                        "gen_ai.system": "togglestore",
+                        "gen_ai.request.model": spec_model,
+                        "agent.name": specialist_key,
+                        "agent.role": "specialist",
+                    }) as spec_span:
+                        spec_tracker = spec_config.create_tracker()
+                        
+                        spec_response = ""
+                        if use_llm:
+                            resp, _ = _make_llm_call("specialist", question)
+                            spec_response = resp or ""
+                        
+                        dur_min, dur_max = spec_profile["duration_range"]
+                        spec_dur = random.randint(dur_min, dur_max)
+                        pt_min, pt_max = spec_profile["prompt_tokens_range"]
+                        ct_min, ct_max = spec_profile["completion_tokens_range"]
+                        spec_prompt = random.randint(pt_min, pt_max)
+                        spec_completion = random.randint(ct_min, ct_max)
+                        
+                        spec_tracker.track_duration(spec_dur)
+                        spec_tracker.track_tokens(TokenUsage(spec_prompt, spec_completion, spec_prompt + spec_completion))
+                        spec_tracker.track_time_to_first_token(random.randint(40, max(50, spec_dur // 4)))
+                        spec_tracker.track_success()
+                        
+                        total_tokens_in += spec_prompt
+                        total_tokens_out += spec_completion
+                        graph_tracker.track_handoff_success(triage_key, specialist_key)
+                        spec_span.set_attribute("gen_ai.usage.input_tokens", spec_prompt)
+                        spec_span.set_attribute("gen_ai.usage.output_tokens", spec_completion)
+                        spec_span.set_attribute("agent.duration_ms", spec_dur)
                 else:
-                    brand_tracker.track_feedback({"kind": FeedbackKind.Negative})
+                    specialist_key = triage_key
                 
-                total_tokens_in += brand_prompt
-                total_tokens_out += brand_completion
+                # --- Node 3: Brand Voice ---
+                brand_key = "ai-config--togglestore-brand-voice"
+                brand_node = graph.get_node(brand_key)
+                execution_path = [triage_key, specialist_key]
+                brand_dur = 0
                 
-                graph_tracker.track_handoff_success(specialist_key, brand_key)
-                execution_path.append(brand_key)
-            
-            # --- Graph-level metrics ---
-            graph_duration = int((time.time() - graph_start) * 1000) + triage_dur + spec_dur + (brand_dur if brand_node else 0)
-            
-            graph_tracker.track_total_tokens(TokenUsage(
-                total_tokens_in, total_tokens_out, total_tokens_in + total_tokens_out,
-            ))
-            graph_tracker.track_invocation_success()
-            graph_tracker.track_duration(graph_duration)
-            graph_tracker.track_path(execution_path)
+                if brand_node is not None:
+                    brand_config = brand_node.get_config()
+                    brand_model = brand_config.model.name if brand_config.model else "unknown"
+                    
+                    with _safe_span(tracer, "agent.brand-voice", attributes={
+                        "gen_ai.system": "togglestore",
+                        "gen_ai.request.model": brand_model,
+                        "agent.name": brand_key,
+                        "agent.role": "brand-voice",
+                    }) as brand_span:
+                        brand_tracker = brand_config.create_tracker()
+                        
+                        if use_llm:
+                            _make_llm_call("brand-voice", question, response=spec_response if specialist_node else "")
+                        
+                        brand_dur = random.randint(300, 1500)
+                        brand_prompt = random.randint(200, 500)
+                        brand_completion = random.randint(150, 600)
+                        
+                        brand_tracker.track_duration(brand_dur)
+                        brand_tracker.track_tokens(TokenUsage(brand_prompt, brand_completion, brand_prompt + brand_completion))
+                        brand_tracker.track_time_to_first_token(random.randint(30, max(50, brand_dur // 5)))
+                        brand_tracker.track_success()
+                        
+                        if random.random() < 0.78:
+                            brand_tracker.track_feedback({"kind": FeedbackKind.Positive})
+                        else:
+                            brand_tracker.track_feedback({"kind": FeedbackKind.Negative})
+                        
+                        total_tokens_in += brand_prompt
+                        total_tokens_out += brand_completion
+                        graph_tracker.track_handoff_success(specialist_key, brand_key)
+                        execution_path.append(brand_key)
+                        brand_span.set_attribute("gen_ai.usage.input_tokens", brand_prompt)
+                        brand_span.set_attribute("gen_ai.usage.output_tokens", brand_completion)
+                        brand_span.set_attribute("agent.duration_ms", brand_dur)
+                
+                # --- Graph-level metrics ---
+                graph_duration = int((time.time() - graph_start) * 1000) + triage_dur + spec_dur + brand_dur
+                
+                graph_tracker.track_total_tokens(TokenUsage(
+                    total_tokens_in, total_tokens_out, total_tokens_in + total_tokens_out,
+                ))
+                graph_tracker.track_invocation_success()
+                graph_tracker.track_duration(graph_duration)
+                graph_tracker.track_path(execution_path)
+                
+                pipeline_span.set_attribute("agent.execution_path", " -> ".join(execution_path))
+                pipeline_span.set_attribute("gen_ai.usage.input_tokens", total_tokens_in)
+                pipeline_span.set_attribute("gen_ai.usage.output_tokens", total_tokens_out)
+                pipeline_span.set_attribute("agent.total_duration_ms", graph_duration)
             
             if (i + 1) % 100 == 0:
                 logging.info(f"  Agent graph: processed {i + 1}/{num_iterations} iterations")
+                _flush_traces()
                 client.flush()
                 time.sleep(0.2)
             
@@ -965,6 +1097,7 @@ def agent_graph_results_generator(client, num_iterations=500):
             logging.error(f"Error in agent graph iteration {i}: {str(e)}")
             continue
     
+    _flush_traces()
     client.flush()
     time.sleep(1)
     logging.info(f"Agent graph results generation completed ({num_iterations} iterations)")
@@ -1080,6 +1213,19 @@ def shopping_assistant_agent_generator(client, stop_event):
     
     logging.info(f"Shopping Assistant Agent generator finished. Total users: {user_counter}")
 
+def _flush_traces():
+    """Flush all pending OpenTelemetry spans."""
+    if not OBSERVABILITY_AVAILABLE:
+        return
+    try:
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "force_flush"):
+            provider.force_flush(timeout_millis=10000)
+            logging.info("Trace spans flushed")
+    except Exception as e:
+        logging.debug(f"Failed to flush traces: {e}")
+
+
 def generate_results(project_key, api_key):
     """Main function to generate all results (single run)."""
     logging.info(f"Generating results for project {project_key}")
@@ -1089,11 +1235,24 @@ def generate_results(project_key, api_key):
         logging.error("LD_SDK_KEY not set in environment. Skipping results generation.")
         return
     
-    config = Config(
-        sdk_key=sdk_key,
-        events_max_pending=5000,
-        flush_interval=5.0,
-    )
+    if OBSERVABILITY_AVAILABLE:
+        obs_config = ObservabilityConfig(
+            service_name="togglestore-results-generator",
+        )
+        config = Config(
+            sdk_key=sdk_key,
+            plugins=[ObservabilityPlugin(obs_config)],
+            events_max_pending=5000,
+            flush_interval=5.0,
+        )
+        logging.info("Observability plugin enabled (traces will be exported)")
+    else:
+        config = Config(
+            sdk_key=sdk_key,
+            events_max_pending=5000,
+            flush_interval=5.0,
+        )
+    
     ldclient.set_config(config)
     client = ldclient.get()
     
@@ -1188,6 +1347,7 @@ def generate_results(project_key, api_key):
         
     finally:
         logging.info("Performing final flush to ensure all events are sent...")
+        _flush_traces()
         client.flush()
         time.sleep(2)
         client.flush()
