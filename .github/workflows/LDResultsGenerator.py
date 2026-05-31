@@ -1250,6 +1250,99 @@ def _flush_traces():
         logging.debug(f"Failed to flush traces: {e}")
 
 
+JUDGE_EVAL_QUERIES = [
+    "What products do you have under $20?",
+    "Can I return the Toggle Float I bought last week?",
+    "What size Developer Shoes should I get if I'm usually a 10?",
+    "Tell me about the LD Watch",
+    "My order hasn't arrived yet",
+    "What would look good with the Bucket Hat?",
+    "Do you ship internationally?",
+    "What's the difference between Toggle Float and Feature Float?",
+    "I received the wrong item in my order",
+    "Can you recommend a gift for a developer?",
+    "How much is the Code & Coffee Mug?",
+    "What material are the Feature Flag Socks made of?",
+    "I want to exchange my shoes for a different size",
+    "What's your best-selling item?",
+    "Is the LDVR Headset actually functional?",
+]
+
+
+def judge_evaluation_data_generator(client, num_iterations=30):
+    """Generate judge evaluation data by running queries through the SDK's managed model flow.
+    Attached judges auto-evaluate and record scores in the Monitoring tab."""
+    if not OPENAI_AVAILABLE:
+        logging.warning("OpenAI not available — skipping judge evaluation data generation")
+        return
+
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        logging.warning("OPENAI_API_KEY not set — skipping judge evaluation data generation")
+        return
+
+    openai_client = OpenAI(api_key=openai_key)
+    aiclient = LDAIClient(client)
+
+    chatbot_key = "ai-config--togglebotchatbot"
+
+    logging.info(f"Generating judge evaluation data ({num_iterations} iterations)...")
+
+    for i in range(num_iterations):
+        query = random.choice(JUDGE_EVAL_QUERIES)
+
+        user = random.choice(["user-judge-eval-1", "user-judge-eval-2", "user-judge-eval-3",
+                              "user-judge-eval-4", "user-judge-eval-5"])
+        context = Context.builder(user).kind("user").set("tier", random.choice(["standard", "platinum"])).build()
+
+        try:
+            config = aiclient.config(
+                chatbot_key,
+                context,
+                {},
+                {"userInput": query}
+            )
+
+            if not config or not config.enabled:
+                logging.debug(f"Judge eval iteration {i+1}: config disabled, skipping")
+                continue
+
+            tracker = config.create_tracker()
+
+            messages = config.messages if config.messages else []
+            if not messages:
+                messages = [{"role": "user", "content": query}]
+
+            try:
+                response = openai_client.chat.completions.create(
+                    model=config.model.get("modelName", "gpt-4o-mini") if config.model else "gpt-4o-mini",
+                    messages=messages,
+                    max_tokens=200,
+                    temperature=0.7,
+                )
+                output_text = response.choices[0].message.content or ""
+                input_tokens = response.usage.prompt_tokens if response.usage else 50
+                output_tokens = response.usage.completion_tokens if response.usage else 30
+
+                tracker.track_tokens(TokenUsage(total=input_tokens + output_tokens, input=input_tokens, output=output_tokens))
+                tracker.track_success()
+                tracker.track_duration(random.uniform(0.8, 3.0))
+
+                if i % 10 == 0:
+                    logging.info(f"  Judge eval iteration {i+1}/{num_iterations} — query: {query[:40]}...")
+
+            except Exception as e:
+                tracker.track_error()
+                logging.debug(f"  Judge eval iteration {i+1} LLM call failed: {e}")
+
+        except Exception as e:
+            logging.debug(f"  Judge eval iteration {i+1} config retrieval failed: {e}")
+
+        time.sleep(0.5)
+
+    logging.info(f"Judge evaluation data generation complete ({num_iterations} iterations)")
+
+
 def generate_results(project_key, api_key):
     """Main function to generate all results (single run)."""
     logging.info(f"Generating results for project {project_key}")
@@ -1329,6 +1422,15 @@ def generate_results(project_key, api_key):
         agent_graph_results_generator(client, num_iterations=500)
         
         logging.info("Agent graph results generation completed.")
+        
+        # 2.8. Generate judge evaluation data
+        logging.info("=" * 60)
+        logging.info("STEP 2.8: Generating judge evaluation data")
+        logging.info("=" * 60)
+        
+        judge_evaluation_data_generator(client, num_iterations=30)
+        
+        logging.info("Judge evaluation data generation completed.")
         
         # 3. Generate guarded rollout results
         logging.info("=" * 60)

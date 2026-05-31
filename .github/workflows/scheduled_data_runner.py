@@ -522,6 +522,70 @@ def _flush_traces():
         logging.debug(f"  Failed to flush traces: {e}")
 
 
+JUDGE_EVAL_QUERIES = [
+    "What products do you have under $20?",
+    "Can I return the Toggle Float I bought last week?",
+    "What size Developer Shoes should I get if I'm usually a 10?",
+    "Tell me about the LD Watch",
+    "My order hasn't arrived yet",
+    "What would look good with the Bucket Hat?",
+    "Do you ship internationally?",
+    "What's the difference between Toggle Float and Feature Float?",
+    "I received the wrong item in my order",
+    "Can you recommend a gift for a developer?",
+    "How much is the Code & Coffee Mug?",
+    "What material are the Feature Flag Socks made of?",
+    "I want to exchange my shoes for a different size",
+    "What's your best-selling item?",
+    "Is the LDVR Headset actually functional?",
+]
+
+
+def run_judge_evaluation_batch(client, aiclient, num_iterations=20):
+    """Generate judge evaluation data via the SDK managed model flow."""
+    if not OPENAI_AVAILABLE or not os.getenv("OPENAI_API_KEY"):
+        logging.warning("OpenAI not available — skipping judge evaluation data")
+        return
+
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    chatbot_key = "ai-config--togglebotchatbot"
+
+    for i in range(num_iterations):
+        query = random.choice(JUDGE_EVAL_QUERIES)
+        user_key = f"user-judge-{random.randint(1, 5)}"
+        context = Context.builder(user_key).kind("user").set("tier", random.choice(["standard", "platinum"])).build()
+
+        try:
+            config = aiclient.config(chatbot_key, context, {}, {"userInput": query})
+            if not config or not config.enabled:
+                continue
+
+            tracker = config.create_tracker()
+            messages = config.messages if config.messages else [{"role": "user", "content": query}]
+
+            response = openai_client.chat.completions.create(
+                model=config.model.get("modelName", "gpt-4o-mini") if config.model else "gpt-4o-mini",
+                messages=messages,
+                max_tokens=200,
+                temperature=0.7,
+            )
+            output_text = response.choices[0].message.content or ""
+            usage = response.usage
+            input_tokens = usage.prompt_tokens if usage else 50
+            output_tokens = usage.completion_tokens if usage else 30
+
+            tracker.track_tokens(TokenUsage(total=input_tokens + output_tokens, input=input_tokens, output=output_tokens))
+            tracker.track_success()
+            tracker.track_duration(random.uniform(0.8, 3.0))
+
+        except Exception as e:
+            logging.debug(f"Judge eval iteration {i+1} failed: {e}")
+
+        time.sleep(0.5)
+
+    logging.info(f"  Judge evaluation batch done ({num_iterations} iterations)")
+
+
 def process_project(project_key, sdk_key):
     """Run a full data generation cycle for a single project."""
     logging.info(f"  Initializing SDK for {project_key}...")
@@ -563,6 +627,9 @@ def process_project(project_key, sdk_key):
 
         logging.info(f"  [{project_key}] Generating agent graph data with traces (200 iterations)...")
         run_agent_graph_batch(client, aiclient, num_iterations=200)
+
+        logging.info(f"  [{project_key}] Generating judge evaluation data (20 iterations)...")
+        run_judge_evaluation_batch(client, aiclient, num_iterations=20)
 
         _flush_traces()
         client.flush()

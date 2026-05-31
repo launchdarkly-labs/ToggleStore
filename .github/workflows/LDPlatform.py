@@ -353,7 +353,8 @@ class LDPlatform:
     # Create AI Config
     ##################################################
     
-    def create_ai_config(self, config_key, config_name, description, tags, mode=None):
+    def create_ai_config(self, config_key, config_name, description, tags, mode=None,
+                         evaluation_metric_key=None, is_inverted=False):
 
         payload = {
             "description": description,
@@ -363,6 +364,9 @@ class LDPlatform:
         }
         if mode:
             payload["mode"] = mode
+        if evaluation_metric_key:
+            payload["evaluationMetricKey"] = evaluation_metric_key
+            payload["isInverted"] = is_inverted
         
         headers = {
             "Content-Type": "application/json",
@@ -2507,6 +2511,53 @@ class LDPlatform:
         else:
             print(f"Error creating snippet '{key}': {response.status_code} {response.text[:300]}")
             return None
+
+    ##################################################
+    # Attach judges to AI Config variation
+    ##################################################
+
+    def attach_judge_to_variation(self, ai_config_key, variation_key, judge_config_key, sampling_rate=1.0):
+        """Attach a single judge to a variation."""
+        return self.attach_judges_to_variation(
+            ai_config_key, variation_key,
+            [{"judgeConfigKey": judge_config_key, "samplingRate": sampling_rate}]
+        )
+
+    def attach_judges_to_variation(self, ai_config_key, variation_key, judges):
+        """Attach multiple judges to a variation. Each judge dict has judgeConfigKey and samplingRate.
+        Note: this replaces all existing judges on the variation."""
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/ai-configs/"
+            + ai_config_key
+            + "/variations/"
+            + variation_key
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+        payload = {
+            "judgeConfiguration": {
+                "judges": judges
+            }
+        }
+        response = self.getrequest("PATCH", url, json=payload, headers=headers)
+        judge_keys = [j["judgeConfigKey"] for j in judges]
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error attaching judges to {ai_config_key}/{variation_key}: {data['message']}")
+                else:
+                    print(f"Attached {len(judges)} judge(s) to {ai_config_key}/{variation_key}: {', '.join(judge_keys)}")
+            except json.JSONDecodeError:
+                pass
+        else:
+            print(f"Attached {len(judges)} judge(s) to {ai_config_key}/{variation_key}: {', '.join(judge_keys)}")
+        return response
 
     ##################################################
     # Upload dataset for Playgrounds / Offline Evals
