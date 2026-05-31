@@ -539,7 +539,10 @@ class ToggleStoreBuilder:
                     "It's super comfy and perfect for coding marathons!! 🔥💻"
                 ),
                 "scores": {
-                    "acceptance": 0.65, "accuracy": 0.72, "relevance": 0.80, "toxicity": 0.05
+                    "acceptance": {"score": 0.65, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.72, "passed": False},
+                    "togglestore-relevance-judge": {"score": 0.80, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.05, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 245, "output": 78},
@@ -560,7 +563,10 @@ class ToggleStoreBuilder:
                     "Charcoal and Navy."
                 ),
                 "scores": {
-                    "acceptance": 0.78, "accuracy": 0.88, "relevance": 0.85, "toxicity": 0.02
+                    "acceptance": {"score": 0.78, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.88, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.85, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.02, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 260, "output": 92},
@@ -584,7 +590,10 @@ class ToggleStoreBuilder:
                     "is $54.99. If you're rocking a multi-monitor setup, the Pro is definitely worth it."
                 ),
                 "scores": {
-                    "acceptance": 0.82, "accuracy": 0.91, "relevance": 0.90, "toxicity": 0.01
+                    "acceptance": {"score": 0.82, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.91, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.90, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.01, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 275, "output": 115},
@@ -610,7 +619,10 @@ class ToggleStoreBuilder:
                     "Need any help getting started?"
                 ),
                 "scores": {
-                    "acceptance": 0.88, "accuracy": 0.93, "relevance": 0.92, "toxicity": 0.0
+                    "acceptance": {"score": 0.88, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.93, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.92, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 290, "output": 108},
@@ -642,7 +654,10 @@ class ToggleStoreBuilder:
                     "If your friend codes late, the hoodie is a can't-miss. Want me to help you pick a size?"
                 ),
                 "scores": {
-                    "acceptance": 0.94, "accuracy": 0.95, "relevance": 0.96, "toxicity": 0.0
+                    "acceptance": {"score": 0.94, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.95, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.96, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
                 },
                 "status": "PASSED",
                 "gen_tokens": {"input": 310, "output": 135},
@@ -672,21 +687,22 @@ class ToggleStoreBuilder:
                 status=iteration["status"],
                 activity="COMPLETED",
                 completion_response=iteration["response"],
+                variation={"model": iteration["model"]},
                 scores=iteration["scores"],
                 generation_tokens=iteration["gen_tokens"],
                 evaluation_tokens=iteration["eval_tokens"],
                 generation_latency=iteration["gen_latency"],
                 evaluation_latencies={
-                    "accuracy": random.randint(600, 900),
-                    "relevance": random.randint(500, 800),
-                    "toxicity": random.randint(400, 700),
+                    "togglestore-accuracy-judge": random.randint(600, 900),
+                    "togglestore-relevance-judge": random.randint(500, 800),
+                    "togglestore-toxicity-judge": random.randint(400, 700),
                 },
             )
             status_icon = "✓" if success else "✗"
-            print(f"    {status_icon} Iteration {i + 1}/{len(brand_voice_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']})")
+            print(f"    {status_icon} Iteration {i + 1}/{len(brand_voice_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
             time.sleep(0.5)
 
-        # Chatbot optimization run — 4 iterations, last one passes
+        # Chatbot optimization run — 3 iterations, last one passes
         run_id_2 = str(uuid.uuid4())
         chatbot_iterations = [
             {
@@ -701,7 +717,10 @@ class ToggleStoreBuilder:
                     "all under $30."
                 ),
                 "scores": {
-                    "acceptance": 0.70, "accuracy": 0.75, "relevance": 0.78, "toxicity": 0.0
+                    "acceptance": {"score": 0.70, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.75, "passed": False},
+                    "togglestore-relevance-judge": {"score": 0.78, "passed": False},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 180, "output": 42},
@@ -728,7 +747,10 @@ class ToggleStoreBuilder:
                     "something more compact."
                 ),
                 "scores": {
-                    "acceptance": 0.84, "accuracy": 0.90, "relevance": 0.88, "toxicity": 0.0
+                    "acceptance": {"score": 0.84, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.90, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.88, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
                 },
                 "status": "FAILED",
                 "gen_tokens": {"input": 210, "output": 118},
@@ -759,7 +781,10 @@ class ToggleStoreBuilder:
                     "Need help finding the order? I can look it up if you share your order number."
                 ),
                 "scores": {
-                    "acceptance": 0.91, "accuracy": 0.94, "relevance": 0.93, "toxicity": 0.0
+                    "acceptance": {"score": 0.91, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.94, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.93, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
                 },
                 "status": "PASSED",
                 "gen_tokens": {"input": 240, "output": 142},
@@ -789,18 +814,493 @@ class ToggleStoreBuilder:
                 status=iteration["status"],
                 activity="COMPLETED",
                 completion_response=iteration["response"],
+                variation={"model": iteration["model"]},
                 scores=iteration["scores"],
                 generation_tokens=iteration["gen_tokens"],
                 evaluation_tokens=iteration["eval_tokens"],
                 generation_latency=iteration["gen_latency"],
                 evaluation_latencies={
-                    "accuracy": random.randint(500, 800),
-                    "relevance": random.randint(450, 750),
-                    "toxicity": random.randint(350, 600),
+                    "togglestore-accuracy-judge": random.randint(500, 800),
+                    "togglestore-relevance-judge": random.randint(450, 750),
+                    "togglestore-toxicity-judge": random.randint(350, 600),
                 },
             )
             status_icon = "✓" if success else "✗"
-            print(f"    {status_icon} Iteration {i + 1}/{len(chatbot_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']})")
+            print(f"    {status_icon} Iteration {i + 1}/{len(chatbot_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
+            time.sleep(0.5)
+
+        # ── Run 2: Brand Voice — FAILED after 3 iterations (couldn't meet brand voice threshold) ──
+        run_id_3 = str(uuid.uuid4())
+        bv_run2_iterations = [
+            {
+                "instructions": (
+                    "Rewrite the specialist response to sound more professional and corporate. "
+                    "Use formal language and avoid contractions."
+                ),
+                "user_input": "Do you have any wireless earbuds that are good for coding sessions?",
+                "model": "amazon.nova-pro-v1:0",
+                "response": (
+                    "Indeed, we offer the Toggle Wireless Earbuds Pro at a price point of $64.99. "
+                    "These earbuds feature active noise cancellation technology and provide "
+                    "approximately 8 hours of battery life per charge. They are well-suited for "
+                    "extended development sessions due to their ergonomic design."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.45, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.85, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.82, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 220, "output": 72},
+                "eval_tokens": {"input": 350, "output": 48},
+                "gen_latency": 1100,
+            },
+            {
+                "instructions": (
+                    "Rewrite the specialist response using a polished yet approachable tone. "
+                    "Avoid slang but keep it conversational. Include product details."
+                ),
+                "user_input": "What are your best-selling items right now?",
+                "model": "amazon.nova-pro-v1:0",
+                "response": (
+                    "Our current top sellers include the Toggle Dev Hoodie at $44.99, the "
+                    "Mechanical Keyboard at $79.99, and the Developer Desk Mat Pro at $54.99. "
+                    "These items consistently receive positive feedback from our developer community."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.58, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.90, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.86, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 235, "output": 68},
+                "eval_tokens": {"input": 365, "output": 50},
+                "gen_latency": 1050,
+            },
+            {
+                "instructions": (
+                    "Rewrite the specialist response in a balanced tone — professional but warm. "
+                    "Address the customer by saying 'you'. Keep responses factual and helpful."
+                ),
+                "user_input": "Can you tell me about the Toggle Hoodie? What sizes and colors does it come in?",
+                "model": "gpt-5-mini",
+                "response": (
+                    "The Toggle Dev Hoodie is available in sizes S through XXL and comes in "
+                    "three colors: Midnight Black, Ocean Blue, and Forest Green. It's priced "
+                    "at $44.99 and features a fleece-lined interior. You might also appreciate "
+                    "the kangaroo pocket, which is popular with our customers."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.71, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.92, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.88, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 250, "output": 82},
+                "eval_tokens": {"input": 390, "output": 55},
+                "gen_latency": 960,
+            },
+        ]
+
+        print("  Generating Brand Voice optimization Run 2 (failed run)...")
+        for i, iteration in enumerate(bv_run2_iterations):
+            result_id = self.ldproject.post_agent_optimization_result(
+                optimization_key="brand-voice-optimization",
+                run_id=run_id_3, version=1, iteration=i + 1,
+                instructions=iteration["instructions"],
+                user_input=iteration["user_input"],
+                parameters={"model": iteration["model"]},
+            )
+            if not result_id:
+                continue
+            self.ldproject.patch_agent_optimization_result(
+                optimization_key="brand-voice-optimization",
+                result_id=result_id, status=iteration["status"], activity="COMPLETED",
+                completion_response=iteration["response"], variation={"model": iteration["model"]},
+                scores=iteration["scores"], generation_tokens=iteration["gen_tokens"],
+                evaluation_tokens=iteration["eval_tokens"], generation_latency=iteration["gen_latency"],
+                evaluation_latencies={
+                    "togglestore-accuracy-judge": random.randint(600, 900),
+                    "togglestore-relevance-judge": random.randint(500, 800),
+                    "togglestore-toxicity-judge": random.randint(400, 700),
+                },
+            )
+            print(f"    Iteration {i + 1}/{len(bv_run2_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
+            time.sleep(0.5)
+
+        # ── Run 3: Brand Voice — PASSED after 4 iterations (GPT-5 Mini wins this time) ──
+        run_id_4 = str(uuid.uuid4())
+        bv_run3_iterations = [
+            {
+                "instructions": (
+                    "You are the ToggleStore brand editor. Make responses sound like a tech blog post. "
+                    "Use headers and technical terminology."
+                ),
+                "user_input": "What's the difference between the Pro and Standard developer desk mat?",
+                "model": "claude-sonnet-4-20250514",
+                "response": (
+                    "## Desk Mat Comparison\n\n"
+                    "**Standard (24x14\"):** Entry-level option with grid pattern. $34.99.\n"
+                    "**Pro (36x16\"):** Premium option with cable management and 4mm thickness. $54.99.\n\n"
+                    "### Verdict\nThe Pro justifies its premium for multi-monitor setups."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.55, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.88, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.84, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 230, "output": 85},
+                "eval_tokens": {"input": 370, "output": 50},
+                "gen_latency": 1200,
+            },
+            {
+                "instructions": (
+                    "You are ToggleStore's voice. Rewrite responses to feel like chatting with a "
+                    "knowledgeable friend who happens to work at the store. Use 'you' and 'your'. "
+                    "Keep it under 150 words."
+                ),
+                "user_input": "I'm looking for a laptop backpack that can fit a 16-inch MacBook Pro. What do you recommend?",
+                "model": "gpt-5-mini",
+                "response": (
+                    "You'll want the Toggle Dev Pack — it's built for exactly this. The laptop "
+                    "sleeve handles up to 17 inches, so your 16-inch MacBook Pro will fit perfectly "
+                    "with room for a case.\n\n"
+                    "It's got dedicated pockets for your charger and cables (no more digging around), "
+                    "and the back panel is padded for commutes. $89.99, available in Charcoal and Navy."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.80, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.91, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.90, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 255, "output": 98},
+                "eval_tokens": {"input": 420, "output": 58},
+                "gen_latency": 890,
+            },
+            {
+                "instructions": (
+                    "You are ToggleStore's Brand Voice agent. Rewrite specialist responses to feel "
+                    "like a helpful friend who's genuinely excited about the products.\n\n"
+                    "Rules:\n"
+                    "- Use 'you'/'your' — talk directly to the customer\n"
+                    "- Keep all factual details intact\n"
+                    "- Stay under 180 words\n"
+                    "- Be enthusiastic but not over-the-top"
+                ),
+                "user_input": "Do you have any wireless earbuds that are good for coding sessions?",
+                "model": "gpt-5-mini",
+                "response": (
+                    "Yes! Check out the Toggle Wireless Earbuds Pro ($64.99). They're basically "
+                    "built for long coding sessions — active noise cancellation keeps the office "
+                    "noise out, and you get about 8 hours per charge so they'll last through your "
+                    "entire workday.\n\n"
+                    "They're lightweight enough that you'll forget you're wearing them, which is "
+                    "exactly what you want when you're deep in a debugging session. They come with "
+                    "three ear tip sizes too, so comfort isn't an issue."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.86, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.93, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.91, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 270, "output": 105},
+                "eval_tokens": {"input": 440, "output": 60},
+                "gen_latency": 870,
+            },
+            {
+                "instructions": (
+                    "You are ToggleStore's Brand Voice agent. Rewrite specialist responses to match "
+                    "our developer-friendly brand personality.\n\n"
+                    "Voice guidelines:\n"
+                    "- Talk to customers like a knowledgeable friend (use 'you'/'your')\n"
+                    "- Be genuinely enthusiastic — not salesy\n"
+                    "- Preserve every fact from the original response\n"
+                    "- Keep it under 180 words, use short paragraphs\n"
+                    "- Bold product names, use bullet points for specs"
+                ),
+                "user_input": "I ordered a mechanical keyboard last week but haven't received a shipping notification yet. Can you help?",
+                "model": "gpt-5-mini",
+                "response": (
+                    "Let's get this sorted! Orders typically ship within 2-3 business days, so yours "
+                    "should be on its way soon.\n\n"
+                    "Here's what I'd suggest:\n"
+                    "- Check your email (including spam) for a shipping confirmation from ToggleStore\n"
+                    "- Pop into your order history at togglestore.com/orders for real-time tracking\n"
+                    "- If it's been more than 3 business days, hit up our support team and they'll "
+                    "track it down for you\n\n"
+                    "The **Toggle Mechanical Keyboard** is worth the wait — you're going to love it!"
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.92, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.94, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.95, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "PASSED",
+                "gen_tokens": {"input": 285, "output": 120},
+                "eval_tokens": {"input": 465, "output": 63},
+                "gen_latency": 910,
+            },
+        ]
+
+        print("  Generating Brand Voice optimization Run 3 (passed, GPT-5 Mini)...")
+        for i, iteration in enumerate(bv_run3_iterations):
+            result_id = self.ldproject.post_agent_optimization_result(
+                optimization_key="brand-voice-optimization",
+                run_id=run_id_4, version=1, iteration=i + 1,
+                instructions=iteration["instructions"],
+                user_input=iteration["user_input"],
+                parameters={"model": iteration["model"]},
+            )
+            if not result_id:
+                continue
+            self.ldproject.patch_agent_optimization_result(
+                optimization_key="brand-voice-optimization",
+                result_id=result_id, status=iteration["status"], activity="COMPLETED",
+                completion_response=iteration["response"], variation={"model": iteration["model"]},
+                scores=iteration["scores"], generation_tokens=iteration["gen_tokens"],
+                evaluation_tokens=iteration["eval_tokens"], generation_latency=iteration["gen_latency"],
+                evaluation_latencies={
+                    "togglestore-accuracy-judge": random.randint(600, 900),
+                    "togglestore-relevance-judge": random.randint(500, 800),
+                    "togglestore-toxicity-judge": random.randint(400, 700),
+                },
+            )
+            print(f"    Iteration {i + 1}/{len(bv_run3_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
+            time.sleep(0.5)
+
+        # ── Run 2: Chatbot — FAILED after 2 iterations (too aggressive cost optimization) ──
+        run_id_5 = str(uuid.uuid4())
+        chat_run2_iterations = [
+            {
+                "instructions": (
+                    "You are ToggleBot. Answer customer questions in one sentence maximum. "
+                    "Prioritize brevity above all else."
+                ),
+                "user_input": "How do I track my order?",
+                "model": "amazon.nova-pro-v1:0",
+                "response": "Check your order status at togglestore.com/orders.",
+                "scores": {
+                    "acceptance": {"score": 0.42, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.65, "passed": False},
+                    "togglestore-relevance-judge": {"score": 0.60, "passed": False},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 150, "output": 12},
+                "eval_tokens": {"input": 220, "output": 35},
+                "gen_latency": 420,
+            },
+            {
+                "instructions": (
+                    "You are ToggleBot. Keep responses to 2-3 sentences. Include the most "
+                    "essential information only. No formatting."
+                ),
+                "user_input": "Do you ship internationally?",
+                "model": "amazon.nova-pro-v1:0",
+                "response": (
+                    "Yes, we ship to over 30 countries. International shipping typically takes "
+                    "7-14 business days. Shipping costs vary by destination."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.62, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.78, "passed": False},
+                    "togglestore-relevance-judge": {"score": 0.75, "passed": False},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 160, "output": 32},
+                "eval_tokens": {"input": 250, "output": 40},
+                "gen_latency": 480,
+            },
+        ]
+
+        print("  Generating Chatbot Response optimization Run 2 (failed run)...")
+        for i, iteration in enumerate(chat_run2_iterations):
+            result_id = self.ldproject.post_agent_optimization_result(
+                optimization_key="chatbot-response-optimization",
+                run_id=run_id_5, version=1, iteration=i + 1,
+                instructions=iteration["instructions"],
+                user_input=iteration["user_input"],
+                parameters={"model": iteration["model"]},
+            )
+            if not result_id:
+                continue
+            self.ldproject.patch_agent_optimization_result(
+                optimization_key="chatbot-response-optimization",
+                result_id=result_id, status=iteration["status"], activity="COMPLETED",
+                completion_response=iteration["response"], variation={"model": iteration["model"]},
+                scores=iteration["scores"], generation_tokens=iteration["gen_tokens"],
+                evaluation_tokens=iteration["eval_tokens"], generation_latency=iteration["gen_latency"],
+                evaluation_latencies={
+                    "togglestore-accuracy-judge": random.randint(500, 800),
+                    "togglestore-relevance-judge": random.randint(450, 750),
+                    "togglestore-toxicity-judge": random.randint(350, 600),
+                },
+            )
+            print(f"    Iteration {i + 1}/{len(chat_run2_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
+            time.sleep(0.5)
+
+        # ── Run 3: Chatbot — PASSED after 4 iterations (GPT-5 wins) ──
+        run_id_6 = str(uuid.uuid4())
+        chat_run3_iterations = [
+            {
+                "instructions": (
+                    "You are ToggleBot, a sales-focused assistant. Upsell products whenever possible. "
+                    "Mention promotions and bundles aggressively."
+                ),
+                "user_input": "What's on sale right now?",
+                "model": "gpt-5",
+                "response": (
+                    "GREAT NEWS! Everything is practically a steal right now! You NEED to check out "
+                    "our Toggle Bundle Deal — keyboard + desk mat for just $119.99 (save $15!). "
+                    "Plus our Toggle Hoodie is flying off the shelves at $44.99. Don't miss out! "
+                    "Buy now before they're GONE!"
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.48, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.60, "passed": False},
+                    "togglestore-relevance-judge": {"score": 0.72, "passed": False},
+                    "togglestore-toxicity-judge": {"score": 0.08, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 190, "output": 75},
+                "eval_tokens": {"input": 320, "output": 48},
+                "gen_latency": 780,
+            },
+            {
+                "instructions": (
+                    "You are ToggleBot. Help customers find what they need. Be helpful and informative. "
+                    "Mention accurate prices. Don't be pushy."
+                ),
+                "user_input": "What products do you have under $30?",
+                "model": "gpt-5",
+                "response": (
+                    "Here are our items under $30:\n\n"
+                    "- Toggle Sticker Pack — $12.99\n"
+                    "- Toggle Socks (3-pack) — $14.99\n"
+                    "- Toggle Cap — $24.99\n"
+                    "- Toggle Coaster Set — $19.99\n\n"
+                    "The sticker pack is great for laptops, and the socks are surprisingly popular "
+                    "with our developer community!"
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.79, "passed": False},
+                    "togglestore-accuracy-judge": {"score": 0.88, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.90, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 195, "output": 88},
+                "eval_tokens": {"input": 340, "output": 50},
+                "gen_latency": 920,
+            },
+            {
+                "instructions": (
+                    "You are ToggleBot, the ToggleStore shopping assistant. Help customers with "
+                    "product questions, orders, and recommendations.\n\n"
+                    "Guidelines:\n"
+                    "- Be helpful, accurate, and friendly\n"
+                    "- Always include prices\n"
+                    "- Suggest alternatives when relevant\n"
+                    "- For issues, give clear action steps\n"
+                    "- Never invent products or prices"
+                ),
+                "user_input": "How do I track my order?",
+                "model": "gpt-5",
+                "response": (
+                    "You can track your order in a couple of ways:\n\n"
+                    "1. **Email** — Check for a shipping confirmation email with a tracking link "
+                    "(also check your spam folder)\n"
+                    "2. **Order History** — Log into togglestore.com/orders and click on your order "
+                    "for real-time tracking\n\n"
+                    "Most orders ship within 2-3 business days. If your order is older than that and "
+                    "you still don't see tracking info, reach out to our support team and we'll "
+                    "sort it out right away."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.87, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.92, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.94, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "FAILED",
+                "gen_tokens": {"input": 225, "output": 110},
+                "eval_tokens": {"input": 395, "output": 58},
+                "gen_latency": 1020,
+            },
+            {
+                "instructions": (
+                    "You are ToggleBot, the ToggleStore shopping assistant. Your mission is helping "
+                    "customers have a great experience.\n\n"
+                    "Communication style:\n"
+                    "- Friendly and knowledgeable — like a helpful colleague\n"
+                    "- Always accurate — never guess at prices or availability\n"
+                    "- Include prices, specs, and relevant details\n"
+                    "- Offer alternatives or next steps proactively\n"
+                    "- Use bullet points and bold for readability\n"
+                    "- Keep responses focused and under 200 words"
+                ),
+                "user_input": "Tell me about the Toggle Mechanical Keyboard — is it worth it?",
+                "model": "gpt-5",
+                "response": (
+                    "Absolutely — the **Toggle Mechanical Keyboard** ($79.99) is one of our most "
+                    "loved products. Here's what makes it stand out:\n\n"
+                    "- **Cherry MX Brown switches** — great tactile feedback without being too loud\n"
+                    "- **Full RGB backlighting** with 12 preset modes\n"
+                    "- **USB-C** with a detachable cable (easy to swap or replace)\n"
+                    "- **PBT keycaps** that resist shine over time\n\n"
+                    "Developers who buy it consistently recommend it to teammates — it's our #1 "
+                    "reviewed product.\n\n"
+                    "If you want something more compact, the **Toggle Mechanical Keyboard Mini** "
+                    "(65% layout) is $49.99 and uses the same switches."
+                ),
+                "scores": {
+                    "acceptance": {"score": 0.93, "passed": True},
+                    "togglestore-accuracy-judge": {"score": 0.96, "passed": True},
+                    "togglestore-relevance-judge": {"score": 0.95, "passed": True},
+                    "togglestore-toxicity-judge": {"score": 0.0, "passed": True},
+                },
+                "status": "PASSED",
+                "gen_tokens": {"input": 250, "output": 138},
+                "eval_tokens": {"input": 445, "output": 65},
+                "gen_latency": 1100,
+            },
+        ]
+
+        print("  Generating Chatbot Response optimization Run 3 (passed, GPT-5)...")
+        for i, iteration in enumerate(chat_run3_iterations):
+            result_id = self.ldproject.post_agent_optimization_result(
+                optimization_key="chatbot-response-optimization",
+                run_id=run_id_6, version=1, iteration=i + 1,
+                instructions=iteration["instructions"],
+                user_input=iteration["user_input"],
+                parameters={"model": iteration["model"]},
+            )
+            if not result_id:
+                continue
+            self.ldproject.patch_agent_optimization_result(
+                optimization_key="chatbot-response-optimization",
+                result_id=result_id, status=iteration["status"], activity="COMPLETED",
+                completion_response=iteration["response"], variation={"model": iteration["model"]},
+                scores=iteration["scores"], generation_tokens=iteration["gen_tokens"],
+                evaluation_tokens=iteration["eval_tokens"], generation_latency=iteration["gen_latency"],
+                evaluation_latencies={
+                    "togglestore-accuracy-judge": random.randint(500, 800),
+                    "togglestore-relevance-judge": random.randint(450, 750),
+                    "togglestore-toxicity-judge": random.randint(350, 600),
+                },
+            )
+            print(f"    Iteration {i + 1}/{len(chat_run3_iterations)}: {iteration['status']} (acceptance: {iteration['scores']['acceptance']['score']})")
             time.sleep(0.5)
 
 ############################################################################################################
