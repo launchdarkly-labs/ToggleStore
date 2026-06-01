@@ -232,9 +232,9 @@ async function runAgent(
   const ldClient = await getLDServerClient()
   const aiClient = initAi(ldClient)
 
-  const aiConfig = await aiClient.config(
+  const aiConfig = await aiClient.agentConfig(
     aiConfigKey,
-    ldContext as Parameters<typeof aiClient.config>[1],
+    ldContext as Parameters<typeof aiClient.agentConfig>[1],
     {},
     templateVars
   )
@@ -246,24 +246,9 @@ async function runAgent(
   const tracker = aiConfig.createTracker()
   const startTime = Date.now()
 
-  const systemPrompt =
-    aiConfig.messages
-      ?.filter((m) => m.role === "system")
-      .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
-      .join("\n") || ""
+  const effectiveSystem = aiConfig.instructions || ""
 
-  const instructions = (aiConfig as unknown as Record<string, unknown>)
-    .instructions as string | undefined
-
-  const effectiveSystem = instructions || systemPrompt || ""
-
-  const userPrompt =
-    aiConfig.messages
-      ?.filter((m) => m.role === "user")
-      .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
-      .join("\n") ||
-    (templateVars.userInput as string) ||
-    ""
+  const userPrompt = (templateVars.userInput as string) || ""
 
   const modelName = aiConfig.model.name
   const spanName = options?.agentLabel ? `chat.${options.agentLabel}` : "chat"
