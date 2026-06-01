@@ -662,6 +662,8 @@ def inventory_sync_error_generator(client):
                     flag_value = client.variation(INVENTORY_SYNC_FLAG_KEY, user_context, False)
                     parent_span.set_attribute("feature_flag.key", INVENTORY_SYNC_FLAG_KEY)
                     parent_span.set_attribute("feature_flag.variant", "real-time-sync" if flag_value else "batch-sync")
+                    parent_span.set_attribute("feature_flag.result.reason.inExperiment", True)
+                    parent_span.set_attribute("feature_flag.context.id", user_context.key)
 
                     if flag_value:
                         parent_span.set_attribute("component", error["component"])
@@ -700,6 +702,8 @@ def inventory_sync_error_generator(client):
                                 "flag.key": INVENTORY_SYNC_FLAG_KEY,
                                 "host": host,
                                 "request.id": request_id,
+                                "feature_flag.result.reason.inExperiment": True,
+                                "feature_flag.context.id": user_context.key,
                             })
 
                         client.track("$ld:telemetry:error", user_context, {
@@ -710,6 +714,8 @@ def inventory_sync_error_generator(client):
                             "severity": error["severity"],
                             "http.status_code": error["http_status"],
                             "flag.key": INVENTORY_SYNC_FLAG_KEY,
+                            "feature_flag.result.reason.inExperiment": True,
+                            "feature_flag.context.id": user_context.key,
                         }, 1)
                         error_counter += 1
             else:

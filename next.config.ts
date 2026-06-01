@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     "@launchdarkly/server-sdk-ai-openai",
     "@launchdarkly/server-sdk-ai",
     "@launchdarkly/observability-node",
+    "openai",
   ],
   // Allow togglestore.app hostname for local development
   allowedDevOrigins: ["http://togglestore.app:3000"],
