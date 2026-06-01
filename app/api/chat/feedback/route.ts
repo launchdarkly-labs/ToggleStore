@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         const tracker = aiClient.createTracker(resumptionToken, context)
         tracker.trackFeedback(feedbackKind)
       } else {
-        const aiConfig = await aiClient.config(aiConfigKey, context, {}, {})
+        const aiConfig = await aiClient.completionConfig(aiConfigKey, context, {}, {})
         const tracker = aiConfig.createTracker()
         tracker.trackFeedback(feedbackKind)
       }

@@ -627,7 +627,7 @@ export async function POST(request: NextRequest) {
             }
 
             // Get fallback AI config to get tracker and model info
-            const fallbackConfig = await aiClient.config(
+            const fallbackConfig = await aiClient.completionConfig(
               aiConfigKey,
               context,
               defaultConfig,

@@ -394,7 +394,7 @@ export async function POST(request: NextRequest) {
       products_list: formattedProducts,
     }
 
-    const aiConfig = await aiClient.config(
+    const aiConfig = await aiClient.completionConfig(
       aiConfigKey,
       context,
       {},
