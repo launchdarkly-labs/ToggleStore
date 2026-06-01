@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   productionBrowserSourceMaps: true,
+  serverExternalPackages: [
+    "@launchdarkly/server-sdk-ai-openai",
+    "@launchdarkly/server-sdk-ai",
+    "@launchdarkly/observability-node",
+  ],
   // Allow togglestore.app hostname for local development
   allowedDevOrigins: ["http://togglestore.app:3000"],
   // Turbopack configuration (Next.js 16+ default bundler)
