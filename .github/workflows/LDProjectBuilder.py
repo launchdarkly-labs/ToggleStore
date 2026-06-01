@@ -146,9 +146,6 @@ class ToggleStoreBuilder:
         self.metric_rewards_signup_rate()
         self.metric_rewards_points_earned()
 
-        # Inventory Sync telemetry error metric (for guarded rollout regression detection)
-        self.metric_telemetry_error()
-
         print("Done")
         self.metrics_created = True
 
@@ -1854,16 +1851,6 @@ class ToggleStoreBuilder:
             tags=["guarded-release", "email", "performance"]
         )
     
-    def metric_telemetry_error(self):
-        res = self.ldproject.create_metric(
-            "telemetry-error-metric",
-            "Telemetry Errors",
-            "$ld:telemetry:error",
-            "Tracks errors captured by the Observability SDK for regression debugging during guarded rollouts",
-            success_criteria="LowerThanBaseline",
-            tags=["guarded-release", "observability", "togglestore", "inventory-sync"]
-        )
-
     def metric_ai_accuracy(self):
         res = self.ldproject.create_metric(
             "ai-accuracy",
