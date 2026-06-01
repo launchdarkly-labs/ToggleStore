@@ -690,10 +690,19 @@ def inventory_sync_error_generator(client):
                             "latency_ms": error["latency_ms"],
                         })
 
+                        # Shared exception id links the recorded observability error to the
+                        # guarded-rollout error metric. The observability backend keys the
+                        # stored error instance off `launchdarkly.exception.id`, and the
+                        # rollout "exemplar errors" UI looks errors up by that same id. Emit it
+                        # on BOTH the recorded exception and the $ld:telemetry:error event so
+                        # the two correlate; otherwise the UI shows no exemplar errors.
+                        exception_id = str(uuid.uuid4())
+
                         try:
                             raise type(error["error_kind"], (Exception,), {})(error["error_message"])
                         except Exception as exc:
                             ldobserve_api.record_exception(exc, {
+                                "launchdarkly.exception.id": exception_id,
                                 "component": error["component"],
                                 "severity": error["severity"],
                                 "http.status_code": error["http_status"],
@@ -707,8 +716,9 @@ def inventory_sync_error_generator(client):
                             })
 
                         client.track("$ld:telemetry:error", user_context, {
-                            "error.kind": error["error_kind"],
-                            "error.message": error["error_message"],
+                            "launchdarkly.exception.id": exception_id,
+                            "exception.type": error["error_kind"],
+                            "exception.message": error["error_message"],
                             "service.name": "inventory-sync-service",
                             "component": error["component"],
                             "severity": error["severity"],
@@ -722,8 +732,8 @@ def inventory_sync_error_generator(client):
                 flag_value = client.variation(INVENTORY_SYNC_FLAG_KEY, user_context, False)
                 if flag_value:
                     client.track("$ld:telemetry:error", user_context, {
-                        "error.kind": error["error_kind"],
-                        "error.message": error["error_message"],
+                        "exception.type": error["error_kind"],
+                        "exception.message": error["error_message"],
                         "service.name": "inventory-sync-service",
                         "component": error["component"],
                         "severity": error["severity"],
