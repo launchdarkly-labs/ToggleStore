@@ -267,7 +267,7 @@ class ToggleStoreBuilder:
             "accuracy-judge-v1",
             "OpenAI.gpt-4o-mini",
             "GPT-4o Mini - Accuracy Judge",
-            {"modelName": "gpt-4o-mini", "parameters": {"maxTokens": 500, "temperature": 0.0}},
+            {"modelName": "gpt-4o-mini", "parameters": {"max_tokens": 500, "temperature": 0.0}},
             messages=[
                 {
                     "role": "system",
@@ -307,7 +307,7 @@ class ToggleStoreBuilder:
             "relevance-judge-v1",
             "OpenAI.gpt-4o-mini",
             "GPT-4o Mini - Relevance Judge",
-            {"modelName": "gpt-4o-mini", "parameters": {"maxTokens": 500, "temperature": 0.0}},
+            {"modelName": "gpt-4o-mini", "parameters": {"max_tokens": 500, "temperature": 0.0}},
             messages=[
                 {
                     "role": "system",
@@ -348,7 +348,7 @@ class ToggleStoreBuilder:
             "toxicity-judge-v1",
             "OpenAI.gpt-4o-mini",
             "GPT-4o Mini - Toxicity Judge",
-            {"modelName": "gpt-4o-mini", "parameters": {"maxTokens": 500, "temperature": 0.0}},
+            {"modelName": "gpt-4o-mini", "parameters": {"max_tokens": 500, "temperature": 0.0}},
             messages=[
                 {
                     "role": "system",
