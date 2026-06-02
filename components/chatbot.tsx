@@ -15,6 +15,7 @@ import ReactMarkdown from "react-markdown"
 import { Product } from "@/types/product"
 import productsData from "@/data/products.json"
 import { MiniProductCard } from "@/components/mini-product-card"
+import { ThumbsUp, ThumbsDown } from "lucide-react"
 
 interface Message {
   id: string
@@ -95,6 +96,7 @@ export function ChatBot({
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
   const [selfHealingMessages, setSelfHealingMessages] = useState<Message[]>([SELF_HEALING_INITIAL_MESSAGE])
   
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, "positive" | "negative">>({})
   const [isLoading, setIsLoading] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState<string>("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -513,8 +515,12 @@ export function ChatBot({
             if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6))
+                if (data.status) {
+                  setLoadingStatus(data.status)
+                }
                 if (data.chunk) {
                   assistantMessage += data.chunk
+                  setLoadingStatus("")
                   // Update the assistant message with streaming content
                   setMessages((prev) => {
                     return prev.map((msg) =>
@@ -555,6 +561,7 @@ export function ChatBot({
                     setSuggestedProducts([])
                   }
                   
+                  setLoadingStatus("")
                   setIsLoading(false)
                   return
                 }
@@ -874,6 +881,21 @@ export function ChatBot({
   const SUGGESTED_PROMPTS = [
     "What is ToggleStore?",
   ]
+
+  const sendFeedback = useCallback(async (messageId: string, kind: "positive" | "negative", configKey: string) => {
+    setFeedbackGiven((prev) => ({ ...prev, [messageId]: kind }))
+    try {
+      await fetch("/api/chat/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: kind, aiConfigKey: configKey }),
+      })
+    } catch (err) {
+      logger.error("Failed to send feedback", err instanceof Error ? err : new Error(String(err)), {
+        component: "chatbot-feedback",
+      })
+    }
+  }, [])
 
   // Reset AI context for self-healing
   const resetSelfHealing = async () => {
@@ -1296,6 +1318,41 @@ export function ChatBot({
                         <div className="w-2 h-2 bg-[#7084FF] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                       </div>
                     )}
+                    {msg.role === "assistant" && msg.content && msg.id !== "welcome" && (
+                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-[#58595B]/30">
+                        <button
+                          onClick={() => sendFeedback(msg.id, "positive", aiConfigKey)}
+                          disabled={!!feedbackGiven[msg.id]}
+                          className={`p-1 rounded transition-colors ${
+                            feedbackGiven[msg.id] === "positive"
+                              ? "text-[#7084FF]"
+                              : feedbackGiven[msg.id]
+                              ? "text-[#58595B] cursor-not-allowed"
+                              : "text-[#A7A9AC] hover:text-[#7084FF]"
+                          }`}
+                          aria-label="Helpful response"
+                        >
+                          <ThumbsUp size={14} />
+                        </button>
+                        <button
+                          onClick={() => sendFeedback(msg.id, "negative", aiConfigKey)}
+                          disabled={!!feedbackGiven[msg.id]}
+                          className={`p-1 rounded transition-colors ${
+                            feedbackGiven[msg.id] === "negative"
+                              ? "text-red-400"
+                              : feedbackGiven[msg.id]
+                              ? "text-[#58595B] cursor-not-allowed"
+                              : "text-[#A7A9AC] hover:text-red-400"
+                          }`}
+                          aria-label="Unhelpful response"
+                        >
+                          <ThumbsDown size={14} />
+                        </button>
+                        {feedbackGiven[msg.id] && (
+                          <span className="text-[12px] text-[#58595B] ml-1">Thanks!</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1323,39 +1380,46 @@ export function ChatBot({
               {isEnabled && isLoading && (
                 <div className="flex justify-start">
                   <div className="max-w-[280px] md:max-w-[400px] lg:max-w-[500px] rounded-[10px] p-[16px] md:p-[18px] lg:p-[20px] bg-[rgba(33,33,33,0.5)] border border-[#58595B]">
-                    <div className="flex items-center gap-1.5 md:gap-2">
-                      <div 
-                        className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
-                        style={{
-                          animation: 'bounce 1.4s ease-in-out infinite',
-                          animationDelay: '0ms'
-                        }}
-                      />
-                      <div 
-                        className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
-                        style={{
-                          animation: 'bounce 1.4s ease-in-out infinite',
-                          animationDelay: '160ms'
-                        }}
-                      />
-                      <div 
-                        className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
-                        style={{
-                          animation: 'bounce 1.4s ease-in-out infinite',
-                          animationDelay: '320ms'
-                        }}
-                      />
-                      <style dangerouslySetInnerHTML={{__html: `
-                        @keyframes bounce {
-                          0%, 60%, 100% {
-                            transform: translateY(0);
-                          }
-                          30% {
-                            transform: translateY(-10px);
-                          }
-                        }
-                      `}} />
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5 md:gap-2">
+                        <div
+                          className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
+                          style={{
+                            animation: 'bounce 1.4s ease-in-out infinite',
+                            animationDelay: '0ms'
+                          }}
+                        />
+                        <div
+                          className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
+                          style={{
+                            animation: 'bounce 1.4s ease-in-out infinite',
+                            animationDelay: '160ms'
+                          }}
+                        />
+                        <div
+                          className="w-2 h-2 md:w-2.5 md:h-2.5 lg:w-3 lg:h-3 rounded-full bg-[#7084FF]"
+                          style={{
+                            animation: 'bounce 1.4s ease-in-out infinite',
+                            animationDelay: '320ms'
+                          }}
+                        />
+                      </div>
+                      {loadingStatus && (
+                        <span className="text-[#A7A9AC] text-[14px] md:text-[15px] animate-pulse font-['Sohne:Buch',sans-serif]">
+                          {loadingStatus}
+                        </span>
+                      )}
                     </div>
+                    <style dangerouslySetInnerHTML={{__html: `
+                      @keyframes bounce {
+                        0%, 60%, 100% {
+                          transform: translateY(0);
+                        }
+                        30% {
+                          transform: translateY(-10px);
+                        }
+                      }
+                    `}} />
                   </div>
                 </div>
               )}

@@ -135,10 +135,8 @@ export async function POST(request: NextRequest) {
     let didFallback = false
     let hasUndefinedEvalResults = false
 
-    // Default config for AI config when not enabled
-    const defaultConfig = {
-      enabled: false,
-    }
+    // Default config for AI config fallback (empty so SDK doesn't return a false disabled state)
+    const defaultConfig = {}
 
     // Check if scores are below threshold
     const scoresBelowThreshold = (scores: JudgeScore): boolean => {
@@ -363,17 +361,110 @@ export async function POST(request: NextRequest) {
         try {
           // Create chat with initial context (ai.fallback = false)
           // We create the chat directly without calling aiClient.config() first to save time
-          const chat = await aiClient.createChat(
-            aiConfigKey,
-            context,
-            defaultConfig,
-            templateVariables
-          )
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let chat: any = null
+          try {
+            chat = await aiClient.createModel(
+              aiConfigKey,
+              context,
+              defaultConfig,
+              templateVariables
+            )
+          } catch (createModelError) {
+            logger.warn("createModel threw an error, will use direct OpenAI fallback", {
+              error: createModelError instanceof Error ? createModelError.message : String(createModelError),
+              aiConfigKey,
+            })
+          }
 
           if (!chat) {
-            logger.warn("Failed to create chat", { aiConfigKey })
-            const errorData = JSON.stringify({ error: "Failed to create chat", done: true })
-            controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+            logger.warn("createModel unavailable, using direct OpenAI call", { aiConfigKey })
+
+            const directConfig = await aiClient.completionConfig(
+              aiConfigKey,
+              context,
+              defaultConfig,
+              templateVariables
+            )
+
+            if (!directConfig || directConfig.enabled === false) {
+              const errorData = JSON.stringify({ error: "AI config is disabled", done: true })
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+              controller.close()
+              return
+            }
+
+            const openaiKey = process.env.OPENAI_API_KEY
+            if (!openaiKey) {
+              const errorData = JSON.stringify({ error: "OPENAI_API_KEY is not set", done: true })
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+              controller.close()
+              return
+            }
+
+            const directModelName = directConfig.model?.name || "gpt-4o"
+            const directMessages = (directConfig.messages || []).map((m: { role?: string; content?: string }) => ({
+              role: m.role || "user",
+              content: m.content || "",
+            }))
+            directMessages.push({ role: "user", content: userInput })
+
+            const statusData = JSON.stringify({ status: "Generating response..." })
+            controller.enqueue(encoder.encode(`data: ${statusData}\n\n`))
+
+            const openaiResp = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openaiKey}`,
+              },
+              body: JSON.stringify({
+                model: directModelName,
+                messages: directMessages,
+                max_tokens: 1000,
+                temperature: 0.7,
+              }),
+            })
+
+            if (!openaiResp.ok) {
+              const errText = await openaiResp.text()
+              throw new Error(`OpenAI API error: ${openaiResp.statusText} - ${errText}`)
+            }
+
+            const openaiData = await openaiResp.json()
+            const directResponse = openaiData.choices?.[0]?.message?.content || ""
+            const directDuration = Date.now() - startTime
+
+            const tracker = directConfig.createTracker()
+            tracker.trackDuration(directDuration)
+            tracker.trackSuccess()
+            if (openaiData.usage) {
+              tracker.trackTokens({
+                input: openaiData.usage.prompt_tokens || 0,
+                output: openaiData.usage.completion_tokens || 0,
+                total: openaiData.usage.total_tokens || 0,
+              })
+            }
+
+            const chunkData = JSON.stringify({ chunk: directResponse, done: false })
+            controller.enqueue(encoder.encode(`data: ${chunkData}\n\n`))
+
+            const finalData = JSON.stringify({
+              response: directResponse,
+              modelName: directModelName,
+              modelType: "openai",
+              enabled: true,
+              timing: { timeToFirstToken: directDuration, totalTime: directDuration },
+              tokens: openaiData.usage ? {
+                input: openaiData.usage.prompt_tokens,
+                output: openaiData.usage.completion_tokens,
+                total: openaiData.usage.total_tokens,
+              } : undefined,
+              judgeScores: { before: {}, after: {} },
+              didFallback: false,
+              done: true,
+            })
+            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
             controller.close()
             return
           }
@@ -466,16 +557,16 @@ export async function POST(request: NextRequest) {
               throw new Error("userInput cannot be empty")
           }
           
-          const chatResponse = await chat.invoke(userInput)
+          const chatResponse = await chat.run(userInput)
           
-          let finalResponse = chatResponse.message?.content || ""
+          let finalResponse = chatResponse.content || ""
           let originalBadResponse = "" // Store original response if fallback occurs
           
           // Log the chat response structure to understand what's available
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const chatResponseAny = chatResponse as any
-          logger.info("Chat response structure after invoke", {
-            hasMessage: !!chatResponse.message,
+          logger.info("Chat response structure after run", {
+            hasContent: !!chatResponse.content,
             hasEvaluations: !!chatResponse.evaluations,
             evaluationsType: chatResponse.evaluations ? (chatResponse.evaluations instanceof Promise ? 'Promise' : typeof chatResponse.evaluations) : 'none',
             responseKeys: Object.keys(chatResponse),
@@ -627,7 +718,7 @@ export async function POST(request: NextRequest) {
             }
 
             // Get fallback AI config to get tracker and model info
-            const fallbackConfig = await aiClient.config(
+            const fallbackConfig = await aiClient.completionConfig(
               aiConfigKey,
               context,
               defaultConfig,
@@ -638,8 +729,8 @@ export async function POST(request: NextRequest) {
               const { model: fallbackModel } = fallbackConfig
               finalModelName = fallbackModel?.name || finalModelName
 
-              // Also check fallbackConfig.tracker for variation name
-              const fallbackTracker = fallbackConfig.tracker as unknown as TrackerWithInternals
+              // Also check fallbackConfig tracker for variation name
+              const fallbackTracker = fallbackConfig.createTracker() as unknown as TrackerWithInternals
               if (fallbackTracker && typeof fallbackTracker._variationKey === 'string') {
                 const variationKey = fallbackTracker._variationKey;
                 if (variationKey.includes('good-prompt')) {
@@ -652,12 +743,21 @@ export async function POST(request: NextRequest) {
               }
 
               // Create new chat with fallback context
-              const fallbackChat = await aiClient.createChat(
-                aiConfigKey,
-                context,
-                defaultConfig,
-                templateVariables
-              )
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              let fallbackChat: any = null
+              try {
+                fallbackChat = await aiClient.createModel(
+                  aiConfigKey,
+                  context,
+                  defaultConfig,
+                  templateVariables
+                )
+              } catch (fallbackCreateError) {
+                logger.warn("Fallback createModel threw an error", {
+                  error: fallbackCreateError instanceof Error ? fallbackCreateError.message : String(fallbackCreateError),
+                  aiConfigKey,
+                })
+              }
 
               if (fallbackChat) {
                 logger.info("Invoking chat with fallback config", { 
@@ -684,9 +784,9 @@ export async function POST(request: NextRequest) {
                    }
                 }
 
-                const fallbackResponse = await fallbackChat.invoke(userInput)
+                const fallbackResponse = await fallbackChat.run(userInput)
                 
-                finalResponse = fallbackResponse.message?.content || finalResponse
+                finalResponse = fallbackResponse.content || finalResponse
                 didFallback = true
 
                 // Get fallback judge evaluation results - use same optimization as initial
@@ -827,13 +927,11 @@ export async function POST(request: NextRequest) {
              estimatedInputTokens += Math.ceil(userInput.length / 4)
           }
           
-          // Fallback to getMessages if we couldn't estimate from internals
+          // Fallback to getConfig().messages if we couldn't estimate from internals
           if (estimatedInputTokens === 0) {
-            const messages = chat.getMessages()
-            // Note: getMessages() might include the response, but we want input only.
-            // This fallback is approximate.
+            const configMessages = chat.getConfig().messages ?? []
             estimatedInputTokens = Math.ceil(
-              messages.reduce((sum, msg) => sum + (msg.content?.length || 0), 0) / 4
+              configMessages.reduce((sum: number, msg: { content?: string }) => sum + (msg.content?.length || 0), 0) / 4
             )
           }
           const estimatedOutputTokens = Math.ceil(finalResponse.length / 4)

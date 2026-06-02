@@ -46,7 +46,7 @@ export async function getServerClient(sdkKey: string, options?: LDOptions): Prom
  * This is the main function to use in your application
  */
 export async function getLDServerClient(): Promise<LDClient> {
-  const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY
+  const sdkKey = process.env.LAUNCHDARKLY_SDK_KEY || process.env.LD_SDK_KEY
 
   if (!sdkKey) {
     logger.warn("LaunchDarkly Server: LAUNCHDARKLY_SDK_KEY not found. Feature flags will use default values.", {

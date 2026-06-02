@@ -36,6 +36,67 @@ const AI_CHATBOT_NEGATIVE_FEEDBACK_KEY = "ai-chatbot-negative-feedback"
 const SHOPPING_AGENT_ACCURACY_KEY = "shopping-agent-accuracy"
 const SHOPPING_AGENT_NEGATIVE_FEEDBACK_KEY = "shopping-agent-negative-feedback"
 
+// Multi-Agent Pipeline AI Config keys
+const MULTI_AGENT_KEYS = [
+  "ai-config--togglestore-triage",
+  "ai-config--togglestore-product-specialist",
+  "ai-config--togglestore-order-specialist",
+  "ai-config--togglestore-style-advisor",
+  "ai-config--togglestore-brand-voice",
+] as const
+
+interface AgentProfile {
+  label: string
+  durationRange: [number, number]
+  promptTokensRange: [number, number]
+  completionTokensRange: [number, number]
+  successRate: number
+  positiveFeedbackRate: number
+}
+
+const MULTI_AGENT_PROFILES: Record<string, AgentProfile> = {
+  "ai-config--togglestore-triage": {
+    label: "Triage Agent",
+    durationRange: [200, 800],
+    promptTokensRange: [50, 150],
+    completionTokensRange: [30, 100],
+    successRate: 0.97,
+    positiveFeedbackRate: 0.70,
+  },
+  "ai-config--togglestore-product-specialist": {
+    label: "Product Specialist",
+    durationRange: [500, 2500],
+    promptTokensRange: [100, 400],
+    completionTokensRange: [150, 600],
+    successRate: 0.95,
+    positiveFeedbackRate: 0.75,
+  },
+  "ai-config--togglestore-order-specialist": {
+    label: "Order & Returns Specialist",
+    durationRange: [400, 2000],
+    promptTokensRange: [80, 300],
+    completionTokensRange: [100, 500],
+    successRate: 0.94,
+    positiveFeedbackRate: 0.65,
+  },
+  "ai-config--togglestore-style-advisor": {
+    label: "Style & Sizing Advisor",
+    durationRange: [600, 3000],
+    promptTokensRange: [120, 450],
+    completionTokensRange: [200, 700],
+    successRate: 0.96,
+    positiveFeedbackRate: 0.80,
+  },
+  "ai-config--togglestore-brand-voice": {
+    label: "Brand Voice Agent",
+    durationRange: [300, 1500],
+    promptTokensRange: [200, 500],
+    completionTokensRange: [150, 600],
+    successRate: 0.98,
+    positiveFeedbackRate: 0.78,
+  },
+}
+
 /**
  * Generate a random user context for flag evaluation
  */
@@ -336,6 +397,188 @@ async function generateAIMonitoringResults(numRuns: number = 1000): Promise<void
 }
 
 /**
+ * Generate multi-agent pipeline monitoring results (all 5 agent configs)
+ */
+async function generateMultiAgentMonitoringResults(
+  numRunsPerAgent: number = 2000
+): Promise<void> {
+  logger.info(
+    `Generating multi-agent monitoring results (${numRunsPerAgent} runs per agent)`
+  )
+
+  for (const agentKey of MULTI_AGENT_KEYS) {
+    const profile = MULTI_AGENT_PROFILES[agentKey]
+    logger.info(
+      `  Generating ${numRunsPerAgent} events for ${profile.label}...`
+    )
+
+    for (let i = 0; i < numRunsPerAgent; i++) {
+      try {
+        const context = generateUserContext()
+        await getFlagValue(agentKey, context, null)
+
+        const [durMin, durMax] = profile.durationRange
+        const duration =
+          Math.floor(Math.random() * (durMax - durMin + 1)) + durMin
+        const timeToFirstToken =
+          Math.floor(Math.random() * (Math.max(60, duration / 3) - 50 + 1)) +
+          50
+
+        const [ptMin, ptMax] = profile.promptTokensRange
+        const [ctMin, ctMax] = profile.completionTokensRange
+        const promptTokens =
+          Math.floor(Math.random() * (ptMax - ptMin + 1)) + ptMin
+        const completionTokens =
+          Math.floor(Math.random() * (ctMax - ctMin + 1)) + ctMin
+        const totalTokens = promptTokens + completionTokens
+
+        await trackMetric("ai-duration", context, duration)
+        await trackMetric("ai-time-to-first-token", context, timeToFirstToken)
+        await trackMetric("ai-prompt-tokens", context, promptTokens)
+        await trackMetric("ai-completion-tokens", context, completionTokens)
+        await trackMetric("ai-total-tokens", context, totalTokens)
+
+        if (Math.random() < profile.successRate) {
+          await trackMetric("ai-success", context)
+        } else {
+          await trackMetric("ai-error", context)
+        }
+
+        const feedbackKind =
+          Math.random() < profile.positiveFeedbackRate ? "positive" : "negative"
+        await trackMetric(`ai-feedback-${feedbackKind}`, context)
+
+        if ((i + 1) % 500 === 0) {
+          logger.info(
+            `    Processed ${i + 1}/${numRunsPerAgent} events for ${profile.label}`
+          )
+        }
+      } catch (error) {
+        logger.error(
+          `Error generating multi-agent result for ${agentKey}, run ${i}`,
+          error instanceof Error ? error : new Error(String(error))
+        )
+      }
+    }
+  }
+
+  logger.info("Multi-agent monitoring results generation completed (all 5 agents)")
+}
+
+/**
+ * Generate Brand Voice model comparison experiment results
+ */
+async function generateBrandVoiceExperimentResults(
+  numUsers: number = 3000
+): Promise<void> {
+  logger.info(
+    `Generating Brand Voice experiment results for ${numUsers} users`
+  )
+  const flagKey = "ai-config--togglestore-brand-voice"
+
+  const modelProfiles: Record<
+    string,
+    {
+      accuracy: [number, number]
+      sourceFidelity: [number, number]
+      relevance: [number, number]
+      cost: [number, number]
+      negativeFeedbackRate: number
+    }
+  > = {
+    sonnet: {
+      accuracy: [91, 96],
+      sourceFidelity: [86, 92],
+      relevance: [90, 96],
+      cost: [0.35, 0.55],
+      negativeFeedbackRate: 0.05,
+    },
+    nova: {
+      accuracy: [87, 93],
+      sourceFidelity: [83, 89],
+      relevance: [86, 92],
+      cost: [0.1, 0.25],
+      negativeFeedbackRate: 0.08,
+    },
+    gpt: {
+      accuracy: [85, 91],
+      sourceFidelity: [81, 87],
+      relevance: [84, 90],
+      cost: [0.15, 0.3],
+      negativeFeedbackRate: 0.09,
+    },
+  }
+
+  const defaultProfile = {
+    accuracy: [85, 91] as [number, number],
+    sourceFidelity: [80, 86] as [number, number],
+    relevance: [83, 89] as [number, number],
+    cost: [0.2, 0.4] as [number, number],
+    negativeFeedbackRate: 0.1,
+  }
+
+  for (let i = 0; i < numUsers; i++) {
+    try {
+      const context = generateUserContext()
+      const variation = await getFlagValue(flagKey, context, null)
+
+      let profile = defaultProfile
+      const modelName =
+        typeof variation === "object" && variation !== null
+          ? String(
+              (variation as Record<string, unknown>).model ||
+                (variation as Record<string, unknown>).name ||
+                ""
+            ).toLowerCase()
+          : ""
+
+      for (const [key, prof] of Object.entries(modelProfiles)) {
+        if (modelName.includes(key)) {
+          profile = prof
+          break
+        }
+      }
+
+      const accuracy =
+        Math.random() * (profile.accuracy[1] - profile.accuracy[0]) +
+        profile.accuracy[0]
+      const sourceFidelity =
+        Math.random() *
+          (profile.sourceFidelity[1] - profile.sourceFidelity[0]) +
+        profile.sourceFidelity[0]
+      const relevance =
+        Math.random() * (profile.relevance[1] - profile.relevance[0]) +
+        profile.relevance[0]
+      const cost =
+        Math.random() * (profile.cost[1] - profile.cost[0]) +
+        profile.cost[0]
+
+      await trackMetric(AI_ACCURACY_KEY, context, accuracy)
+      await trackMetric(AI_SOURCE_FIDELITY_KEY, context, sourceFidelity)
+      await trackMetric(AI_RELEVANCE_KEY, context, relevance)
+      await trackMetric(AI_COST_KEY, context, cost)
+
+      if (Math.random() < profile.negativeFeedbackRate) {
+        await trackMetric(AI_CHATBOT_NEGATIVE_FEEDBACK_KEY, context)
+      }
+
+      if ((i + 1) % 500 === 0) {
+        logger.info(
+          `Processed ${i + 1}/${numUsers} users for Brand Voice experiment`
+        )
+      }
+    } catch (error) {
+      logger.error(
+        `Error generating Brand Voice experiment result for user ${i}`,
+        error instanceof Error ? error : new Error(String(error))
+      )
+    }
+  }
+
+  logger.info("Brand Voice experiment results generation completed")
+}
+
+/**
  * Generate shopping assistant agent results
  */
 async function generateShoppingAssistantResults(numUsers: number = 1000): Promise<void> {
@@ -490,6 +733,8 @@ export async function generateAllResults(options?: {
   aiConfigUsers?: number
   aiMonitoringRuns?: number
   shoppingAssistantUsers?: number
+  multiAgentRunsPerAgent?: number
+  brandVoiceExperimentUsers?: number
   numErrors?: number
 }): Promise<{
   success: boolean
@@ -499,6 +744,8 @@ export async function generateAllResults(options?: {
     aiConfig?: { users: number; status: string }
     aiMonitoring?: { runs: number; status: string }
     shoppingAssistant?: { users: number; status: string }
+    multiAgentMonitoring?: { runsPerAgent: number; status: string }
+    brandVoiceExperiment?: { users: number; status: string }
     errors?: { count: number; status: string }
   }
   error?: string
@@ -514,6 +761,8 @@ export async function generateAllResults(options?: {
     aiConfig?: { users: number; status: string }
     aiMonitoring?: { runs: number; status: string }
     shoppingAssistant?: { users: number; status: string }
+    multiAgentMonitoring?: { runsPerAgent: number; status: string }
+    brandVoiceExperiment?: { users: number; status: string }
     errors?: { count: number; status: string }
   } = {}
 
@@ -585,6 +834,40 @@ export async function generateAllResults(options?: {
         error instanceof Error ? error : new Error(String(error))
       )
       results.shoppingAssistant = { users: 0, status: "failed" }
+    }
+
+    // Generate multi-agent pipeline monitoring results
+    logger.info("STEP 2.5: Generating multi-agent pipeline monitoring results")
+    logger.info("-".repeat(60))
+
+    try {
+      const multiAgentRuns = options?.multiAgentRunsPerAgent || 2000
+      await generateMultiAgentMonitoringResults(multiAgentRuns)
+      results.multiAgentMonitoring = {
+        runsPerAgent: multiAgentRuns,
+        status: "completed",
+      }
+    } catch (error) {
+      logger.error(
+        "Failed to generate multi-agent monitoring results",
+        error instanceof Error ? error : new Error(String(error))
+      )
+      results.multiAgentMonitoring = { runsPerAgent: 0, status: "failed" }
+    }
+
+    try {
+      const brandVoiceUsers = options?.brandVoiceExperimentUsers || 3000
+      await generateBrandVoiceExperimentResults(brandVoiceUsers)
+      results.brandVoiceExperiment = {
+        users: brandVoiceUsers,
+        status: "completed",
+      }
+    } catch (error) {
+      logger.error(
+        "Failed to generate Brand Voice experiment results",
+        error instanceof Error ? error : new Error(String(error))
+      )
+      results.brandVoiceExperiment = { users: 0, status: "failed" }
     }
 
     // Generate errors and logs

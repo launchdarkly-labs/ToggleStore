@@ -1,7 +1,6 @@
 import requests
 import json
 import time
-import uuid
 
 
 class LDPlatform:
@@ -14,6 +13,8 @@ class LDPlatform:
     client_id = ""
     sdk_key = ""
     user_id = None
+    account_id = None
+    project_internal_id = None
 
     ##################################################
     # Constructor
@@ -22,6 +23,66 @@ class LDPlatform:
         self.api_key = api_key
         self.api_key_user = api_key_user
         self.user_id = self.get_user_id(email)
+        self._fetch_member_me()
+
+    def _extract_account_id(self, data):
+        if not isinstance(data, dict):
+            return None
+        for key in ("_accountId", "accountId", "account_id"):
+            val = data.get(key)
+            if val:
+                return str(val)
+        acc = data.get("account")
+        if isinstance(acc, dict):
+            for key in ("_id", "id", "key"):
+                val = acc.get(key)
+                if val:
+                    return str(val)
+        return None
+
+    def _fetch_member_me(self):
+        try:
+            res = requests.get(
+                "https://app.launchdarkly.com/api/v2/members/me",
+                headers={"Authorization": self.api_key, "Content-Type": "application/json"},
+            )
+            if res.status_code == 200:
+                data = res.json()
+                self.account_id = self._extract_account_id(data)
+                if not self.user_id:
+                    self.user_id = data.get("_id")
+            else:
+                print(f"Warning: /api/v2/members/me returned {res.status_code}")
+        except Exception as e:
+            print(f"Warning: Failed to fetch /api/v2/members/me: {e}")
+        if not self.account_id:
+            self._fetch_account_id_fallbacks()
+
+    def _fetch_account_id_fallbacks(self):
+        if self.account_id:
+            return
+        try:
+            if self.user_id:
+                res = requests.get(
+                    f"https://app.launchdarkly.com/api/v2/members/{self.user_id}",
+                    headers={"Authorization": self.api_key, "Content-Type": "application/json"},
+                )
+                if res.status_code == 200:
+                    self.account_id = self._extract_account_id(res.json())
+        except Exception as e:
+            print(f"Warning: GET /api/v2/members/{{id}} failed: {e}")
+        if self.account_id:
+            return
+        try:
+            res = requests.get(
+                "https://app.launchdarkly.com/api/v2/account",
+                headers={"Authorization": self.api_key, "Content-Type": "application/json"},
+            )
+            if res.status_code == 200:
+                data = res.json()
+                self.account_id = self._extract_account_id(data) or (str(data["_id"]) if data.get("_id") else None)
+        except Exception:
+            pass
 
     def getrequest(self, method, url, json=None, headers=None):
 
@@ -102,6 +163,9 @@ class LDPlatform:
             print(f"Response status: {response.status_code}")
             print(f"Response: {response.text[:500]}...")
             return
+
+        # Capture project internal ID for /internal/ API calls
+        self.project_internal_id = data.get("_id")
 
         # Extract environment information
         for e in data["environments"]:
@@ -288,14 +352,20 @@ class LDPlatform:
     # Create AI Config
     ##################################################
     
-    def create_ai_config(self, config_key, config_name, description, tags):
-        
+    def create_ai_config(self, config_key, config_name, description, tags, mode=None,
+                         evaluation_metric_key=None, is_inverted=False):
+
         payload = {
             "description": description,
             "key": config_key,
             "name": config_name,
             "tags": tags
         }
+        if mode:
+            payload["mode"] = mode
+        if evaluation_metric_key:
+            payload["evaluationMetricKey"] = evaluation_metric_key
+            payload["isInverted"] = is_inverted
         
         headers = {
             "Content-Type": "application/json",
@@ -322,19 +392,25 @@ class LDPlatform:
     # Create AI Config Versions
     ##################################################
         
-    def create_ai_config_versions(self, ai_config_key, ai_config_version_key, ai_model_config_key, ai_config_version_name, model, messages, custom=None):
+    def create_ai_config_versions(self, ai_config_key, ai_config_version_key, ai_model_config_key, ai_config_version_name, model, messages=None, custom=None, instructions=None, description=None):
         
         payload = {
             "key": ai_config_version_key,
             "name": ai_config_version_name,
-            "messages": messages,  # Used for AI config versions
             "model": model,
             "modelConfigKey": ai_model_config_key,
             "tools": [],
             "toolKeys": []
         }
+        if instructions is not None:
+            payload["instructions"] = instructions
+            payload["messages"] = []
+        else:
+            payload["messages"] = messages or []
         if custom is not None:
             payload["custom"] = custom
+        if description is not None:
+            payload["description"] = description
 
         headers = {
             "Content-Type": "application/json",
@@ -478,6 +554,118 @@ class LDPlatform:
             
         return response
     
+    ##################################################
+    # Create AI Tool
+    # https://launchdarkly.com/docs/api/ai-configs/post-ai-tool
+    ##################################################
+
+    def create_ai_tool(self, tool_key, description=None, schema=None, custom_parameters=None):
+        payload = {
+            "key": tool_key,
+            "schema": schema if schema is not None else {"properties": {}, "additionalProperties": False, "required": []}
+        }
+        if description:
+            payload["description"] = description
+        if custom_parameters is not None:
+            payload["customParameters"] = custom_parameters
+        if self.user_id:
+            payload["maintainerId"] = self.user_id
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        response = self.getrequest(
+            "POST",
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/ai-tools",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error creating AI tool {tool_key}: {data['message']}")
+                else:
+                    print(f"Created AI tool: {tool_key}")
+            except json.JSONDecodeError:
+                pass
+        return response
+
+    ##################################################
+    # Attach tools to an AI Config variation
+    # https://launchdarkly.com/docs/api/ai-configs/patch-ai-config-variation
+    ##################################################
+
+    def patch_variation_tools(self, ai_config_key, variation_key, tools):
+        payload = {"tools": tools}
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/ai-configs/"
+            + ai_config_key
+            + "/variations/"
+            + variation_key
+        )
+        response = self.getrequest("PATCH", url, json=payload, headers=headers)
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error attaching tools to {ai_config_key}/{variation_key}: {data['message']}")
+            except json.JSONDecodeError:
+                pass
+        return response
+
+    ##################################################
+    # Create Agent Graph
+    # https://launchdarkly.com/docs/api/ai-configs/post-agent-graph
+    ##################################################
+
+    def create_agent_graph(self, graph_key, graph_name, description, edges, root_config_key=None):
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/agent-graphs"
+        )
+
+        payload = {
+            "key": graph_key,
+            "name": graph_name,
+            "description": description,
+            "edges": edges,
+        }
+        if root_config_key:
+            payload["rootConfigKey"] = root_config_key
+
+        if self.user_id:
+            payload["maintainerId"] = self.user_id
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        response = self.getrequest("POST", url, json=payload, headers=headers)
+        try:
+            data = json.loads(response.text)
+            if "message" in data:
+                print("Error creating agent graph: " + data["message"])
+            else:
+                print(f"Created agent graph: {graph_key}")
+        except json.JSONDecodeError:
+            print(f"Agent graph creation response status: {response.status_code}")
+        return response
+
     ##################################################
     # Create Custom Model Configuration
     ##################################################
@@ -1195,6 +1383,11 @@ class LDPlatform:
         data = json.loads(res.text)
         if "message" in data:
             return False
+        self.project_internal_id = data.get("_id") or self.project_internal_id
+        if not self.account_id:
+            aid = self._extract_account_id(data)
+            if aid:
+                self.account_id = aid
         return True
     
     ##################################################
@@ -1773,7 +1966,25 @@ class LDPlatform:
             payload["comment"] = comment
 
         res = self.getrequest("PATCH", url, headers=headers, json=payload)
-        return res
+
+        try:
+            data = json.loads(res.text)
+            if "message" in data:
+                print(f"Error toggling AI config: {data['message']}")
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+        on_value = flag_state == "on"
+        json_patch_headers = {
+            "Authorization": self.api_key,
+            "Content-Type": "application/json",
+        }
+        json_patch_payload = [
+            {"op": "replace", "path": "/environments/" + flag_env + "/on", "value": on_value}
+        ]
+        res2 = self.getrequest("PATCH", url, headers=json_patch_headers, json=json_patch_payload)
+
+        return res2
 
     ##################################################
     # Add a maintainerId to flag
@@ -2259,3 +2470,378 @@ class LDPlatform:
             print(f"✅ Alert created: {alert_name}")
         
         return response
+
+    ##################################################
+    # Create Prompt Snippet (AI Config Library)
+    ##################################################
+
+    def create_snippet(self, key, name, text, description=None, tags=None):
+        """Create a reusable prompt snippet in the AI Configs Library."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+        }
+
+        payload = {
+            "key": key,
+            "name": name,
+            "text": text,
+        }
+        if description:
+            payload["description"] = description
+        if tags:
+            payload["tags"] = tags
+
+        response = self.getrequest(
+            "POST",
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/ai-configs/prompt-snippets",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code in (200, 201):
+            data = json.loads(response.text)
+            version = data.get("version", 1)
+            print(f"Created snippet: {name} (key: {key}, version: {version})")
+            return data
+        elif response.status_code == 409:
+            print(f"Snippet '{key}' already exists, skipping")
+            return {"key": key, "version": 1}
+        else:
+            print(f"Error creating snippet '{key}': {response.status_code} {response.text[:300]}")
+            return None
+
+    ##################################################
+    # Create Agent Optimization
+    ##################################################
+
+    def create_agent_optimization(self, key, ai_config_key, max_attempts, judge_model,
+                                   model_choices=None, acceptance_statements=None,
+                                   judges=None, user_input_options=None,
+                                   ground_truth_responses=None, metric_key=None,
+                                   token_limit=None, variable_choices=None):
+        """Create an agent optimization config via POST /api/v2/projects/{projectKey}/agent-optimizations."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        payload = {
+            "key": key,
+            "aiConfigKey": ai_config_key,
+            "maxAttempts": max_attempts,
+            "judgeModel": judge_model,
+        }
+        if model_choices is not None:
+            payload["modelChoices"] = model_choices
+        if acceptance_statements is not None:
+            payload["acceptanceStatements"] = acceptance_statements
+        if judges is not None:
+            payload["judges"] = judges
+        if user_input_options is not None:
+            payload["userInputOptions"] = user_input_options
+        if ground_truth_responses is not None:
+            payload["groundTruthResponses"] = ground_truth_responses
+        if metric_key is not None:
+            payload["metricKey"] = metric_key
+        if token_limit is not None:
+            payload["tokenLimit"] = token_limit
+        if variable_choices is not None:
+            payload["variableChoices"] = variable_choices
+
+        response = requests.post(
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/agent-optimizations",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code in (200, 201):
+            data = response.json()
+            print(f"Created agent optimization: {key}")
+            return data
+        elif response.status_code == 409:
+            print(f"Agent optimization '{key}' already exists, skipping")
+            return {"key": key}
+        else:
+            print(f"Error creating agent optimization '{key}': {response.status_code} {response.text[:300]}")
+            return None
+
+    def post_agent_optimization_result(self, optimization_key, run_id, version, iteration, instructions, user_input, parameters=None):
+        """Create a new result (iteration) for an agent optimization run."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        payload = {
+            "runId": run_id,
+            "agentOptimizationVersion": version,
+            "iteration": iteration,
+            "instructions": instructions,
+            "userInput": user_input,
+        }
+        if parameters is not None:
+            payload["parameters"] = parameters
+
+        response = requests.post(
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/agent-optimizations/{optimization_key}/results",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code in (200, 201):
+            data = response.json()
+            return data.get("id")
+        else:
+            print(f"Error creating optimization result (iter {iteration}): {response.status_code} {response.text[:300]}")
+            return None
+
+    def patch_agent_optimization_result(self, optimization_key, result_id,
+                                         status=None, activity=None, completion_response=None,
+                                         variation=None, scores=None, generation_tokens=None,
+                                         evaluation_tokens=None, generation_latency=None,
+                                         evaluation_latencies=None, created_variation_key=None):
+        """Update an agent optimization result with scores, status, response, etc."""
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+
+        payload = {}
+        if status is not None:
+            payload["status"] = status
+        if activity is not None:
+            payload["activity"] = activity
+        if completion_response is not None:
+            payload["completionResponse"] = completion_response
+        if variation is not None:
+            payload["variation"] = variation
+        if scores is not None:
+            payload["scores"] = scores
+        if generation_tokens is not None:
+            payload["generationTokens"] = generation_tokens
+        if evaluation_tokens is not None:
+            payload["evaluationTokens"] = evaluation_tokens
+        if generation_latency is not None:
+            payload["generationLatency"] = generation_latency
+        if evaluation_latencies is not None:
+            payload["evaluationLatencies"] = evaluation_latencies
+        if created_variation_key is not None:
+            payload["createdVariationKey"] = created_variation_key
+
+        response = requests.patch(
+            f"https://app.launchdarkly.com/api/v2/projects/{self.project_key}/agent-optimizations/{optimization_key}/results/{result_id}",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code in (200, 204):
+            return True
+        else:
+            print(f"Error updating optimization result {result_id}: {response.status_code} {response.text[:300]}")
+            return False
+
+    ##################################################
+    # Attach judges to AI Config variation
+    ##################################################
+
+    def attach_judge_to_variation(self, ai_config_key, variation_key, judge_config_key, sampling_rate=1.0):
+        """Attach a single judge to a variation."""
+        return self.attach_judges_to_variation(
+            ai_config_key, variation_key,
+            [{"judgeConfigKey": judge_config_key, "samplingRate": sampling_rate}]
+        )
+
+    def attach_judges_to_variation(self, ai_config_key, variation_key, judges):
+        """Attach multiple judges to a variation. Each judge dict has judgeConfigKey and samplingRate.
+        Note: this replaces all existing judges on the variation."""
+        url = (
+            "https://app.launchdarkly.com/api/v2/projects/"
+            + self.project_key
+            + "/ai-configs/"
+            + ai_config_key
+            + "/variations/"
+            + variation_key
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "LD-API-Version": "beta",
+        }
+        payload = {
+            "judgeConfiguration": {
+                "judges": judges
+            }
+        }
+        response = self.getrequest("PATCH", url, json=payload, headers=headers)
+        judge_keys = [j["judgeConfigKey"] for j in judges]
+        if response.text.strip():
+            try:
+                data = json.loads(response.text)
+                if "message" in data:
+                    print(f"Error attaching judges to {ai_config_key}/{variation_key}: {data['message']}")
+                else:
+                    print(f"Attached {len(judges)} judge(s) to {ai_config_key}/{variation_key}: {', '.join(judge_keys)}")
+            except json.JSONDecodeError:
+                pass
+        else:
+            print(f"Attached {len(judges)} judge(s) to {ai_config_key}/{variation_key}: {', '.join(judge_keys)}")
+        return response
+
+    ##################################################
+    # Upload dataset for Playgrounds / Offline Evals
+    ##################################################
+
+    def upload_dataset(self, dataset_name, csv_content, filename=None):
+        """Upload a CSV dataset via /internal/ endpoint (requires personal access token)."""
+        if not self.account_id or not self.user_id or not self.project_internal_id:
+            print(f"Error: Missing required IDs for dataset upload (account={self.account_id}, member={self.user_id}, project={self.project_internal_id})")
+            return None
+
+        if filename is None:
+            filename = dataset_name.replace(" ", "_") + ".csv"
+
+        csv_bytes = csv_content.encode("utf-8")
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "X-Ld-Accountid": self.account_id,
+            "X-Ld-Mbrid": self.user_id,
+            "X-Ld-Prjid": self.project_internal_id,
+        }
+
+        payload = {
+            "name": dataset_name,
+            "filename": filename,
+            "format": "csv",
+            "size_bytes": len(csv_bytes),
+        }
+
+        response = requests.post(
+            f"https://app.launchdarkly.com/internal/projects/{self.project_key}/datasets",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code not in (200, 201):
+            print(f"Error creating dataset '{dataset_name}': {response.status_code} {response.text[:300]}")
+            return None
+
+        data = response.json()
+        dataset_id = data.get("datasetId")
+        upload_info = data.get("upload", {})
+        upload_url = upload_info.get("uploadUrl")
+        upload_method = upload_info.get("uploadMethod", "PUT")
+        upload_headers = upload_info.get("uploadHeaders", {"Content-Type": "text/csv"})
+
+        if not upload_url:
+            print(f"Error: No upload URL returned for dataset '{dataset_name}'")
+            return None
+
+        upload_resp = requests.request(
+            upload_method,
+            upload_url,
+            data=csv_bytes,
+            headers=upload_headers,
+        )
+
+        if upload_resp.status_code in (200, 204):
+            print(f"Uploaded dataset: {dataset_name} ({len(csv_bytes)} bytes, {csv_content.count(chr(10))} rows)")
+            return dataset_id
+        else:
+            print(f"Error uploading CSV to S3 for '{dataset_name}': {upload_resp.status_code}")
+            return None
+
+    ##################################################
+    # Create Evaluation (for Playgrounds)
+    ##################################################
+
+    def create_evaluation(self, name, generation_provider, generation_model,
+                          messages=None, criteria=None, evaluation_provider=None,
+                          evaluation_model=None, variables=None, parameters=None):
+        if not self.account_id or not self.user_id or not self.project_internal_id:
+            print(f"Error: Missing required IDs for evaluation creation")
+            return None
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "X-Ld-Accountid": self.account_id,
+            "X-Ld-Mbrid": self.user_id,
+            "X-Ld-Prjid": self.project_internal_id,
+        }
+
+        payload = {
+            "name": name,
+            "generationProvider": generation_provider,
+            "generationModel": generation_model,
+        }
+        if messages is not None:
+            payload["messages"] = messages
+        if criteria is not None:
+            payload["criteria"] = criteria
+        if evaluation_provider is not None:
+            payload["evaluationProvider"] = evaluation_provider
+        if evaluation_model is not None:
+            payload["evaluationModel"] = evaluation_model
+        if variables is not None:
+            payload["variables"] = variables
+        if parameters is not None:
+            payload["parameters"] = parameters
+
+        response = requests.post(
+            f"https://app.launchdarkly.com/internal/projects/{self.project_key}/evaluations",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code not in (200, 201):
+            print(f"Error creating evaluation '{name}': {response.status_code} {response.text[:300]}")
+            return None
+
+        data = response.json()
+        return data.get("id")
+
+    ##################################################
+    # Create Playground
+    ##################################################
+
+    def create_playground(self, name, evaluation_ids):
+        if not self.account_id or not self.user_id or not self.project_internal_id:
+            print(f"Error: Missing required IDs for playground creation")
+            return None
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": self.api_key,
+            "X-Ld-Accountid": self.account_id,
+            "X-Ld-Mbrid": self.user_id,
+            "X-Ld-Prjid": self.project_internal_id,
+        }
+
+        variants = [
+            {"evaluationId": eid, "position": idx}
+            for idx, eid in enumerate(evaluation_ids)
+        ]
+
+        payload = {
+            "name": name,
+            "variants": variants,
+        }
+
+        response = requests.post(
+            f"https://app.launchdarkly.com/internal/projects/{self.project_key}/playgrounds",
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code not in (200, 201):
+            print(f"Error creating playground '{name}': {response.status_code} {response.text[:300]}")
+            return None
+
+        data = response.json()
+        return data.get("id")

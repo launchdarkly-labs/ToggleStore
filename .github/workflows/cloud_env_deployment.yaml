@@ -18,6 +18,7 @@ env:
   DEMO_NAMESPACE: ${{ github.event.inputs.name }}
   LD_PROJECT_KEY: ${{ github.event.inputs.name }}-togglestore
   LD_API_KEY: ${{ secrets.LD_API_KEY }}
+  LD_EAP_API_KEY: ${{ secrets.LD_EAP_API_KEY }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   EKS_POD_IDENTITY_ROLE_ARN: ${{ secrets.EKS_POD_IDENTITY_ROLE_ARN }}
 
@@ -30,9 +31,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.9"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: |
@@ -47,11 +48,21 @@ jobs:
           echo "Creating and Setting up LaunchDarkly project for namespace: ${{ env.DEMO_NAMESPACE }}"
           python ./.github/workflows/LDProjectBuilder.py
         env:
-          LD_API_KEY: ${{ env.LD_API_KEY }}
+          LD_API_KEY: ${{ env.LD_EAP_API_KEY != '' && env.LD_EAP_API_KEY || env.LD_API_KEY }}
           LD_API_KEY_USER: ${{ env.LD_API_KEY_USER }}
           LD_PROJECT_KEY: ${{ env.LD_PROJECT_KEY }}
           DEMO_NAMESPACE: ${{ env.DEMO_NAMESPACE }}
       
+      - name: Generate synthetic results data
+        run: |
+          echo "Generating results data for project: ${{ env.LD_PROJECT_KEY }}"
+          python ./.github/workflows/LDResultsGenerator.py
+        env:
+          LD_API_KEY: ${{ env.LD_EAP_API_KEY != '' && env.LD_EAP_API_KEY || env.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ env.LD_PROJECT_KEY }}
+          LD_SDK_KEY: ${{ env.LD_SDK_KEY }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+
       - name: Create .env file for demo pod
         run: |
           touch ./.env.production
@@ -83,6 +94,19 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }} .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }}
+
+      - name: Upload source maps to LaunchDarkly
+        if: env.LD_API_KEY != ''
+        run: |
+          CONTAINER_ID=$(docker create ${{ steps.login-ecr.outputs.registry }}/togglestore:${{ env.DEMO_NAMESPACE }}-${{ github.run_id }})
+          docker cp $CONTAINER_ID:/app/.next/static ./sourcemaps-static
+          docker rm $CONTAINER_ID
+          npx ldcli sourcemaps upload \
+            --project-key ${{ env.LD_PROJECT_KEY }} \
+            --environment production \
+            --source-map-directory ./sourcemaps-static \
+            --access-token ${{ env.LD_API_KEY }} || echo "Source map upload failed (non-blocking)"
+          rm -rf ./sourcemaps-static
 
       - name: Update K8s Deploy File
         run: python ./.github/workflows/update_k8s_deploy_file.py
