@@ -688,10 +688,13 @@ def inventory_sync_error_generator(client):
                             "latency_ms": error["latency_ms"],
                         })
 
+                        exception_id = str(uuid.uuid4())
+
                         try:
                             raise type(error["error_kind"], (Exception,), {})(error["error_message"])
                         except Exception as exc:
                             ldobserve_api.record_exception(exc, {
+                                "launchdarkly.exception.id": exception_id,
                                 "component": error["component"],
                                 "severity": error["severity"],
                                 "http.status_code": error["http_status"],
@@ -703,8 +706,9 @@ def inventory_sync_error_generator(client):
                             })
 
                         client.track("$ld:telemetry:error", user_context, {
-                            "error.kind": error["error_kind"],
-                            "error.message": error["error_message"],
+                            "launchdarkly.exception.id": exception_id,
+                            "exception.type": error["error_kind"],
+                            "exception.message": error["error_message"],
                             "service.name": "inventory-sync-service",
                             "component": error["component"],
                             "severity": error["severity"],
@@ -716,8 +720,8 @@ def inventory_sync_error_generator(client):
                 flag_value = client.variation(INVENTORY_SYNC_FLAG_KEY, user_context, False)
                 if flag_value:
                     client.track("$ld:telemetry:error", user_context, {
-                        "error.kind": error["error_kind"],
-                        "error.message": error["error_message"],
+                        "exception.type": error["error_kind"],
+                        "exception.message": error["error_message"],
                         "service.name": "inventory-sync-service",
                         "component": error["component"],
                         "severity": error["severity"],
