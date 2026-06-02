@@ -371,9 +371,93 @@ export async function POST(request: NextRequest) {
           )
 
           if (!chat) {
-            logger.warn("Failed to create model", { aiConfigKey })
-            const errorData = JSON.stringify({ error: "Failed to create model", done: true })
-            controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+            logger.warn("createModel unavailable, using direct OpenAI call", { aiConfigKey })
+
+            const directConfig = await aiClient.config(
+              aiConfigKey,
+              context,
+              defaultConfig,
+              templateVariables
+            )
+
+            if (!directConfig || directConfig.enabled === false) {
+              const errorData = JSON.stringify({ error: "AI config is disabled", done: true })
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+              controller.close()
+              return
+            }
+
+            const openaiKey = process.env.OPENAI_API_KEY
+            if (!openaiKey) {
+              const errorData = JSON.stringify({ error: "OPENAI_API_KEY is not set", done: true })
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
+              controller.close()
+              return
+            }
+
+            const directModelName = directConfig.model?.name || "gpt-4o"
+            const directMessages = (directConfig.messages || []).map((m: { role?: string; content?: string }) => ({
+              role: m.role || "user",
+              content: m.content || "",
+            }))
+            directMessages.push({ role: "user", content: userInput })
+
+            const statusData = JSON.stringify({ status: "Generating response..." })
+            controller.enqueue(encoder.encode(`data: ${statusData}\n\n`))
+
+            const openaiResp = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${openaiKey}`,
+              },
+              body: JSON.stringify({
+                model: directModelName,
+                messages: directMessages,
+                max_tokens: 1000,
+                temperature: 0.7,
+              }),
+            })
+
+            if (!openaiResp.ok) {
+              const errText = await openaiResp.text()
+              throw new Error(`OpenAI API error: ${openaiResp.statusText} - ${errText}`)
+            }
+
+            const openaiData = await openaiResp.json()
+            const directResponse = openaiData.choices?.[0]?.message?.content || ""
+            const directDuration = Date.now() - startTime
+
+            const tracker = directConfig.createTracker()
+            tracker.trackDuration(directDuration)
+            tracker.trackSuccess()
+            if (openaiData.usage) {
+              tracker.trackTokens({
+                input: openaiData.usage.prompt_tokens || 0,
+                output: openaiData.usage.completion_tokens || 0,
+                total: openaiData.usage.total_tokens || 0,
+              })
+            }
+
+            const chunkData = JSON.stringify({ chunk: directResponse, done: false })
+            controller.enqueue(encoder.encode(`data: ${chunkData}\n\n`))
+
+            const finalData = JSON.stringify({
+              response: directResponse,
+              modelName: directModelName,
+              modelType: "openai",
+              enabled: true,
+              timing: { timeToFirstToken: directDuration, totalTime: directDuration },
+              tokens: openaiData.usage ? {
+                input: openaiData.usage.prompt_tokens,
+                output: openaiData.usage.completion_tokens,
+                total: openaiData.usage.total_tokens,
+              } : undefined,
+              judgeScores: { before: {}, after: {} },
+              didFallback: false,
+              done: true,
+            })
+            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
             controller.close()
             return
           }
