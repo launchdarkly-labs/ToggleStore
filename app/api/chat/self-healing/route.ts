@@ -135,10 +135,8 @@ export async function POST(request: NextRequest) {
     let didFallback = false
     let hasUndefinedEvalResults = false
 
-    // Default config for AI config when not enabled
-    const defaultConfig = {
-      enabled: false,
-    }
+    // Default config for AI config fallback (empty so SDK doesn't return a false disabled state)
+    const defaultConfig = {}
 
     // Check if scores are below threshold
     const scoresBelowThreshold = (scores: JudgeScore): boolean => {
@@ -363,12 +361,21 @@ export async function POST(request: NextRequest) {
         try {
           // Create chat with initial context (ai.fallback = false)
           // We create the chat directly without calling aiClient.config() first to save time
-          const chat = await aiClient.createModel(
-            aiConfigKey,
-            context,
-            defaultConfig,
-            templateVariables
-          )
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let chat: any = null
+          try {
+            chat = await aiClient.createModel(
+              aiConfigKey,
+              context,
+              defaultConfig,
+              templateVariables
+            )
+          } catch (createModelError) {
+            logger.warn("createModel threw an error, will use direct OpenAI fallback", {
+              error: createModelError instanceof Error ? createModelError.message : String(createModelError),
+              aiConfigKey,
+            })
+          }
 
           if (!chat) {
             logger.warn("createModel unavailable, using direct OpenAI call", { aiConfigKey })
@@ -736,12 +743,21 @@ export async function POST(request: NextRequest) {
               }
 
               // Create new chat with fallback context
-              const fallbackChat = await aiClient.createModel(
-                aiConfigKey,
-                context,
-                defaultConfig,
-                templateVariables
-              )
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              let fallbackChat: any = null
+              try {
+                fallbackChat = await aiClient.createModel(
+                  aiConfigKey,
+                  context,
+                  defaultConfig,
+                  templateVariables
+                )
+              } catch (fallbackCreateError) {
+                logger.warn("Fallback createModel threw an error", {
+                  error: fallbackCreateError instanceof Error ? fallbackCreateError.message : String(fallbackCreateError),
+                  aiConfigKey,
+                })
+              }
 
               if (fallbackChat) {
                 logger.info("Invoking chat with fallback config", { 
