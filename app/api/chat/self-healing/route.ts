@@ -373,7 +373,7 @@ export async function POST(request: NextRequest) {
           if (!chat) {
             logger.warn("createModel unavailable, using direct OpenAI call", { aiConfigKey })
 
-            const directConfig = await aiClient.config(
+            const directConfig = await aiClient.completionConfig(
               aiConfigKey,
               context,
               defaultConfig,
