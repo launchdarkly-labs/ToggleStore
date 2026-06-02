@@ -53,6 +53,16 @@ jobs:
           LD_PROJECT_KEY: ${{ env.LD_PROJECT_KEY }}
           DEMO_NAMESPACE: ${{ env.DEMO_NAMESPACE }}
       
+      - name: Generate synthetic results data
+        run: |
+          echo "Generating results data for project: ${{ env.LD_PROJECT_KEY }}"
+          python ./.github/workflows/LDResultsGenerator.py
+        env:
+          LD_API_KEY: ${{ env.LD_EAP_API_KEY != '' && env.LD_EAP_API_KEY || env.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ env.LD_PROJECT_KEY }}
+          LD_SDK_KEY: ${{ env.LD_SDK_KEY }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+
       - name: Create .env file for demo pod
         run: |
           touch ./.env.production
