@@ -12,6 +12,8 @@ interface LaunchDarklyContext {
   [key: string]: unknown
 }
 
+export const dynamic = "force-dynamic"
+
 /**
  * Product API Health Check Route
  * Simulates backend errors when apiRelease flag is enabled
@@ -51,59 +53,41 @@ export async function GET(request: NextRequest) {
       const errorTypes = [
         {
           type: "DatabaseConnectionError",
+          label: "Database Error",
           message: "Failed to connect to product database",
           code: "DB_CONNECTION_FAILED",
-          throwError: () => {
-            throw new Error(`[${Date.now()}] Database connection timeout: Unable to reach product service at mongodb://products-db:27017`)
-          },
         },
         {
           type: "InvalidResponseFormat",
+          label: "Backend Error",
           message: "Backend returned invalid response format",
           code: "INVALID_RESPONSE",
-          throwError: () => {
-            const error = new Error(`[${Date.now()}] Invalid response format from product service: Expected JSON but received malformed data`)
-            ;(error as Error & { code?: string }).code = "INVALID_RESPONSE"
-            throw error
-          },
         },
         {
           type: "ServiceUnavailable",
+          label: "Service Error",
           message: "Product API endpoint returned 500 error",
           code: "SERVICE_UNAVAILABLE",
-          throwError: () => {
-            const error = new Error(`[${Date.now()}] Service unavailable: Product API endpoint returned 500 Internal Server Error`)
-            ;(error as Error & { statusCode?: number }).statusCode = 500
-            throw error
-          },
         },
         {
           type: "TimeoutError",
+          label: "Timeout Error",
           message: "Request timeout waiting for product service",
           code: "REQUEST_TIMEOUT",
-          throwError: () => {
-            const error = new Error(`[${Date.now()}] Request timeout: Product service did not respond within 30 seconds`)
-            ;(error as Error & { code?: string }).code = "TIMEOUT"
-            throw error
-          },
         },
         {
           type: "DataParsingError",
+          label: "Parse Error",
           message: "Failed to parse product data from backend",
           code: "PARSE_ERROR",
-          throwError: () => {
-            const error = new Error(`[${Date.now()}] Data parsing error: Invalid JSON structure in product response`)
-            ;(error as Error & { code?: string }).code = "PARSE_ERROR"
-            throw error
-          },
         },
       ]
 
       // Randomly select an error type
       const randomError = errorTypes[Math.floor(Math.random() * errorTypes.length)]
       
-      // Create error object
-      const error = new Error(`Product API error: ${randomError.message}`)
+      // Create error object with distinct label per error kind
+      const error = new Error(`${randomError.label}: ${randomError.message}`)
       ;(error as Error & { code?: string; errorType?: string }).code = randomError.code
       ;(error as Error & { code?: string; errorType?: string }).errorType = randomError.type
       

@@ -67,6 +67,7 @@ jobs:
         run: |
           touch ./.env.production
           echo NEXT_PUBLIC_LD_CLIENT_KEY=${{ env.LD_CLIENT_KEY }} >> ./.env.production
+          echo NEXT_PUBLIC_LAUNCHDARKLY_CLIENT_ID=${{ env.LD_CLIENT_KEY }} >> ./.env.production
           echo LD_SDK_KEY=${{ env.LD_SDK_KEY }} >> ./.env.production
           echo LD_API_KEY=${{ env.LD_API_KEY }} >> ./.env.production
           echo DESTINATIONENV=production >> ./.env.production
