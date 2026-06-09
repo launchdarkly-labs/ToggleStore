@@ -325,11 +325,12 @@ def payments_systems_upgrade_generator(client):
     if not _wait_for_measured_rollout(PAYMENTS_FLAG_KEY, "Payments Systems Upgrade"):
         return
     
+    MAX_USERS = 5000
     user_counter = 0
     flush_counter = 0
     status_check_counter = 0
     
-    while True:
+    while user_counter < MAX_USERS:
         # Check rollout status every 500 users
         if status_check_counter >= 500:
             flag_details = get_flag_details(PAYMENTS_FLAG_KEY)
@@ -399,12 +400,13 @@ def email_notification_service_upgrade_generator(client):
     if not _wait_for_measured_rollout(EMAIL_SERVICE_FLAG_KEY, "Email Notification Service Upgrade"):
         return
     
+    MAX_USERS = 5000
     user_counter = 0
     flush_counter = 0
     status_check_counter = 0
     alert_triggered = False
     
-    while True:
+    while user_counter < MAX_USERS:
         # Check rollout status every 500 users
         if status_check_counter >= 500:
             flag_details = get_flag_details(EMAIL_SERVICE_FLAG_KEY)
@@ -626,12 +628,13 @@ def inventory_sync_error_generator(client):
             inv_tracer = None
     logging.info(f"Inventory sync traces={'enabled' if inv_tracer else 'disabled'}")
 
+    MAX_USERS = 5000
     user_counter = 0
     flush_counter = 0
     status_check_counter = 0
     error_counter = 0
 
-    while True:
+    while user_counter < MAX_USERS:
         if status_check_counter >= 500:
             flag_details = get_flag_details(INVENTORY_SYNC_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
@@ -1496,11 +1499,12 @@ def shopping_assistant_agent_generator(client):
     if not _wait_for_measured_rollout(SHOPPING_ASSISTANT_AGENT_FLAG_KEY, "Shopping Assistant Agent"):
         return
     
+    MAX_USERS = 5000
     user_counter = 0
     flush_counter = 0
     status_check_counter = 0
     
-    while True:
+    while user_counter < MAX_USERS:
         # Check rollout status every 500 users
         if status_check_counter >= 500:
             flag_details = get_flag_details(SHOPPING_ASSISTANT_AGENT_FLAG_KEY)
