@@ -2067,10 +2067,10 @@ class ToggleStoreBuilder:
                 }
             ],
             tags=["guarded-release", "payment", "upgrade", "togglestore"],
-            on_variation=0,
+            on_variation=1,
         )
         res = self.ldproject.attach_metric_to_flag("paymentsSystemsUpgrade", ["payment-success-rate", "payment-latency", "payment-error-rate"])
-        res = self.ldproject.add_guarded_rollout("paymentsSystemsUpgrade", "production", metrics=["payment-success-rate", "payment-latency", "payment-error-rate"], days=3)
+        res = self.ldproject.add_guarded_rollout("paymentsSystemsUpgrade", "production", metrics=["payment-success-rate", "payment-latency", "payment-error-rate"], days=1)
 
     def flag_email_notification_service_upgrade(self):
         res = self.ldproject.create_flag(
@@ -2088,10 +2088,10 @@ class ToggleStoreBuilder:
                 }
             ],
             tags=["guarded-release", "email", "upgrade", "togglestore"],
-            on_variation=0,
+            on_variation=1,
         )
         res = self.ldproject.attach_metric_to_flag("emailNotificationServiceUpgrade", ["email-error-rate", "email-latency", "email-delivery-rate"])
-        res = self.ldproject.add_guarded_rollout("emailNotificationServiceUpgrade", "production", metrics=["email-error-rate", "email-latency", "email-delivery-rate"], days=7, rollback=True)
+        res = self.ldproject.add_guarded_rollout("emailNotificationServiceUpgrade", "production", metrics=["email-error-rate", "email-latency", "email-delivery-rate"], days=3, rollback=True)
 
     def flag_inventory_sync_upgrade(self):
         res = self.ldproject.create_flag(

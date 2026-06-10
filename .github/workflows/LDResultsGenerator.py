@@ -313,160 +313,119 @@ def _wait_for_measured_rollout(flag_key, label, max_retries=6):
     return False
 
 def payments_systems_upgrade_generator(client):
-    """Guarded rollout generator for payments systems upgrade - SUCCESSFUL release"""
+    """Guarded rollout generator for payments systems upgrade - SUCCESSFUL release.
+    Matches core demo pattern: treatment (True) has better metrics than control (False)."""
     if not client.is_initialized():
         logging.error("LaunchDarkly client is not initialized for Payments Systems Upgrade")
         return
     
     logging.info("Starting guarded release generator for Payments Systems Upgrade (SUCCESS scenario)...")
     
-    # Wait for rollout to be ready
     logging.info("Waiting for flag rollout to be ready...")
     if not _wait_for_measured_rollout(PAYMENTS_FLAG_KEY, "Payments Systems Upgrade"):
         return
     
     MAX_USERS = 5000
-    user_counter = 0
-    flush_counter = 0
     status_check_counter = 0
-    
-    while user_counter < MAX_USERS:
-        # Check rollout status every 500 users
-        if status_check_counter >= 500:
+
+    while True:
+        if status_check_counter >= 100:
             flag_details = get_flag_details(PAYMENTS_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
                 logging.info("Measured rollout is over. Exiting Payments Systems Upgrade generator.")
                 break
             status_check_counter = 0
-        
         try:
             user_context = generate_user_context()
             flag_value = client.variation(PAYMENTS_FLAG_KEY, user_context, False)
-            
-            # SUCCESS SCENARIO: New version (True) performs aggressively better than legacy
+
             if flag_value:
-                # NEW VERSION (True): Excellent performance - aggressively successful release
-                error_rate = 0.1  # 0.1% error rate (extremely low)
-                latency = 80      # 80ms latency (very fast)
-                success_rate = 99.9  # 99.9% success rate (excellent)
+                if random.random() < 0.05:
+                    client.track(PAYMENT_ERROR_RATE_KEY, user_context)
+                if random.random() < 0.92:
+                    client.track(PAYMENT_SUCCESS_RATE_KEY, user_context)
+                latency = random.randint(50, 150)
+                client.track(PAYMENT_LATENCY_KEY, user_context, None, latency)
             else:
-                # LEGACY VERSION (False): Baseline performance
-                error_rate = 1.5   # 1.5% error rate (higher)
-                latency = 200     # 200ms latency (slower)
-                success_rate = 98.5  # 98.5% success rate (lower)
-            
-            # Track success rate
-            if random.random() < (success_rate / 100):
-                client.track(PAYMENT_SUCCESS_RATE_KEY, user_context)
-            
-            # Track error rate
-            if random.random() < (error_rate / 100):
-                client.track(PAYMENT_ERROR_RATE_KEY, user_context)
-            
-            # Track latency with very tight variance for consistency
-            latency_variance = 5  # Tight variance: ±5ms
-            latency_value = int(latency + random.uniform(-latency_variance, latency_variance))
-            client.track(PAYMENT_LATENCY_KEY, user_context, None, latency_value)
-            
-            user_counter += 1
-            flush_counter += 1
+                if random.random() < 0.15:
+                    client.track(PAYMENT_ERROR_RATE_KEY, user_context)
+                if random.random() < 0.82:
+                    client.track(PAYMENT_SUCCESS_RATE_KEY, user_context)
+                latency = random.randint(200, 400)
+                client.track(PAYMENT_LATENCY_KEY, user_context, None, latency)
+
             status_check_counter += 1
-            
-            # Flush events every 200 users to reduce connection pool pressure
-            if flush_counter >= 200:
-                client.flush()
-                flush_counter = 0
-                logging.info(f"Flushed payment events (total users: {user_counter})")
-                time.sleep(0.1)  # Small delay after flush to allow connections to close
-            
-            time.sleep(0.02)  # 20ms delay to reduce event rate
-            
+            time.sleep(0.03)
         except Exception as e:
             logging.error(f"Error generating payment metrics: {str(e)}")
             continue
     
-    logging.info(f"Payments Systems Upgrade generator finished. Total users: {user_counter}")
+    logging.info("Payments Systems Upgrade generator finished.")
 
 def email_notification_service_upgrade_generator(client):
-    """Guarded rollout generator for email notification service upgrade - FAILED release with rollback"""
+    """Guarded rollout generator for email notification service upgrade - FAILED release with rollback.
+    Matches core demo pattern: treatment (True) progressively degrades, triggering auto-rollback."""
     if not client.is_initialized():
         logging.error("LaunchDarkly client is not initialized for Email Notification Service Upgrade")
         return
     
     logging.info("Starting guarded release generator for Email Notification Service Upgrade (FAILURE scenario with rollback)...")
     
-    # Wait for rollout to be ready
     logging.info("Waiting for flag rollout to be ready...")
     if not _wait_for_measured_rollout(EMAIL_SERVICE_FLAG_KEY, "Email Notification Service Upgrade"):
         return
     
-    MAX_USERS = 5000
     user_counter = 0
-    flush_counter = 0
     status_check_counter = 0
-    alert_triggered = False
-    
-    while user_counter < MAX_USERS:
-        # Check rollout status every 500 users
-        if status_check_counter >= 500:
+
+    while True:
+        if status_check_counter >= 100:
             flag_details = get_flag_details(EMAIL_SERVICE_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
                 logging.info("Measured rollout is over. Exiting Email Notification Service Upgrade generator.")
                 break
             status_check_counter = 0
-        
         try:
             user_context = generate_user_context()
             flag_value = client.variation(EMAIL_SERVICE_FLAG_KEY, user_context, False)
-            
-            # FAILURE SCENARIO: New version (True) performs aggressively worse - triggers rollback
+
             if flag_value:
-                # NEW VERSION (True): Catastrophic performance - will aggressively trigger rollback
-                error_rate = 25.0      # 25% error rate (catastrophically high)
-                latency = 8000         # 8000ms latency (extremely slow email sending)
-                delivery_rate = 0.60   # 60% delivery rate (very low - many emails failing)
-                
-                # Trigger alert when first user gets bad version
-                if not alert_triggered:
-                    logging.warning(f"🚨 Email service rollback triggered at user {user_counter} - high error rate detected!")
-                    alert_triggered = True
+                if user_counter < 10000:
+                    progress = 0.0
+                else:
+                    progress = min((user_counter - 10000) / 10000.0, 1.0)
+
+                error_chance = 0.08 + (0.64 * progress) + random.uniform(-0.08, 0.08)
+                error_chance = max(0.05, min(0.80, error_chance))
+                delivery_chance = 0.90 - (0.60 * progress) + random.uniform(-0.05, 0.05)
+                delivery_chance = max(0.15, min(0.92, delivery_chance))
+
+                lat_progress = max(0.0, (progress - 0.4) / 0.6) if progress > 0.4 else 0.0
+                latency_low = int(80 + (270 * lat_progress))
+                latency_high = int(180 + (570 * lat_progress))
+
+                if random.random() < error_chance:
+                    client.track(EMAIL_ERROR_RATE_KEY, user_context)
+                if random.random() < delivery_chance:
+                    client.track(EMAIL_DELIVERY_RATE_KEY, user_context)
+                latency = random.randint(latency_low, latency_high)
+                client.track(EMAIL_LATENCY_KEY, user_context, None, latency)
             else:
-                # LEGACY VERSION (False): Excellent baseline performance
-                error_rate = 0.2       # 0.2% error rate (very low)
-                latency = 150          # 150ms latency (fast email sending)
-                delivery_rate = 0.995  # 99.5% delivery rate (excellent)
-            
-            # Track error rate
-            if random.random() < (error_rate / 100):
-                client.track(EMAIL_ERROR_RATE_KEY, user_context)
-            
-            # Track latency with tight variance for consistency
-            latency_variance = 500 if flag_value else 20  # Tight variance: ±500ms for bad, ±20ms for good
-            latency_value = int(latency + random.uniform(-latency_variance, latency_variance))
-            client.track(EMAIL_LATENCY_KEY, user_context, None, latency_value)
-            
-            # Track delivery rate (success = email delivered)
-            if random.random() < delivery_rate:
-                client.track(EMAIL_DELIVERY_RATE_KEY, user_context)
-            
+                if random.random() < 0.08:
+                    client.track(EMAIL_ERROR_RATE_KEY, user_context)
+                if random.random() < 0.90:
+                    client.track(EMAIL_DELIVERY_RATE_KEY, user_context)
+                latency = random.randint(80, 180)
+                client.track(EMAIL_LATENCY_KEY, user_context, None, latency)
+
             user_counter += 1
-            flush_counter += 1
             status_check_counter += 1
-            
-            # Flush events every 200 users to reduce connection pool pressure
-            if flush_counter >= 200:
-                client.flush()
-                flush_counter = 0
-                logging.info(f"Flushed email service events (total users: {user_counter})")
-                time.sleep(0.1)  # Small delay after flush to allow connections to close
-            
-            time.sleep(0.02)  # 20ms delay to reduce event rate
-            
+            time.sleep(0.03)
         except Exception as e:
             logging.error(f"Error generating email service metrics: {str(e)}")
             continue
     
-    logging.info(f"Email Notification Service Upgrade generator finished. Total users: {user_counter}")
+    logging.info("Email Notification Service Upgrade generator finished.")
 
 def inventory_sync_error_generator(client):
     """Guarded rollout generator for inventory sync upgrade - generates telemetry errors for regression debugging"""
@@ -635,7 +594,7 @@ def inventory_sync_error_generator(client):
     error_counter = 0
 
     while user_counter < MAX_USERS:
-        if status_check_counter >= 500:
+        if status_check_counter >= 100:
             flag_details = get_flag_details(INVENTORY_SYNC_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
                 logging.info("Measured rollout is over. Exiting Inventory Sync Upgrade generator.")
@@ -1506,7 +1465,7 @@ def shopping_assistant_agent_generator(client):
     
     while user_counter < MAX_USERS:
         # Check rollout status every 500 users
-        if status_check_counter >= 500:
+        if status_check_counter >= 100:
             flag_details = get_flag_details(SHOPPING_ASSISTANT_AGENT_FLAG_KEY)
             if not flag_details or not is_measured_rollout(flag_details):
                 logging.info("Measured rollout is over. Exiting Shopping Assistant Agent generator.")
