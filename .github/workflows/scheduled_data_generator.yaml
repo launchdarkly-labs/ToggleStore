@@ -40,4 +40,3 @@ jobs:
           LD_API_KEY: ${{ env.LD_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SPECIFIC_NAMESPACE: ${{ github.event.inputs.specific_namespace }}
-          OTEL_EXPORTER_OTLP_ENDPOINT: https://otel.observability.app.launchdarkly.com:443
