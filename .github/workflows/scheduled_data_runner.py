@@ -258,6 +258,22 @@ def run_monitoring_batch(client, aiclient, runs_per_agent=300):
         client.flush()
 
 
+AGENT_GRAPH_TOOLS = {
+    "triage": ["classify_intent", "extract_entities", "lookup_customer_context"],
+    "ai-config--togglestore-product-specialist": [
+        "search_product_catalog", "get_product_details", "check_inventory_availability", "calculate_discount",
+    ],
+    "ai-config--togglestore-order-specialist": [
+        "lookup_order_status", "track_shipment", "process_return_request", "generate_return_label",
+    ],
+    "ai-config--togglestore-account-specialist": [
+        "verify_account", "get_account_history", "update_preferences", "retrieve_knowledge_base",
+    ],
+    "brand-voice": ["fetch_brand_guidelines", "validate_tone", "format_response"],
+}
+AGENT_GRAPH_ERROR_RATE = 0.025
+
+
 def run_agent_graph_batch(client, aiclient, num_iterations=200):
     """Generate agent graph data with handoffs, paths, per-node metrics, and OTel traces."""
     tracer = _get_tracer()
@@ -331,7 +347,16 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                     t.track_duration(triage_dur)
                     t.track_tokens(TokenUsage(triage_pt, triage_ct, triage_pt + triage_ct))
                     t.track_time_to_first_token(random.randint(30, min(80, triage_dur)))
-                    t.track_success()
+
+                    triage_tools = random.sample(AGENT_GRAPH_TOOLS["triage"], k=random.randint(1, 2))
+                    t.track_tool_calls(triage_tools)
+
+                    triage_failed = random.random() < AGENT_GRAPH_ERROR_RATE
+                    if triage_failed:
+                        t.track_error()
+                    else:
+                        t.track_success()
+
                     total_in += triage_pt
                     total_out += triage_ct
                     triage_span.set_attribute("gen_ai.usage.input_tokens", triage_pt)
@@ -345,6 +370,7 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                     specialist_key, MULTI_AGENT_PROFILES["ai-config--togglestore-product-specialist"]
                 )
                 spec_dur = 0
+                spec_failed = False
 
                 if specialist_node is not None:
                     spec_model = "unknown"
@@ -377,10 +403,21 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                         st.track_duration(spec_dur)
                         st.track_tokens(TokenUsage(spec_pt, spec_ct, spec_pt + spec_ct))
                         st.track_time_to_first_token(random.randint(40, max(50, spec_dur // 4)))
-                        st.track_success()
+
+                        spec_tool_pool = AGENT_GRAPH_TOOLS.get(specialist_key, ["retrieve_knowledge_base", "search_product_catalog"])
+                        spec_tools = random.sample(spec_tool_pool, k=random.randint(1, min(3, len(spec_tool_pool))))
+                        st.track_tool_calls(spec_tools)
+
+                        spec_failed = not triage_failed and random.random() < AGENT_GRAPH_ERROR_RATE
+                        if triage_failed or spec_failed:
+                            st.track_error()
+                            graph_tracker.track_handoff_failure(triage_key, specialist_key)
+                        else:
+                            st.track_success()
+                            graph_tracker.track_handoff_success(triage_key, specialist_key)
+
                         total_in += spec_pt
                         total_out += spec_ct
-                        graph_tracker.track_handoff_success(triage_key, specialist_key)
                         spec_span.set_attribute("gen_ai.usage.input_tokens", spec_pt)
                         spec_span.set_attribute("gen_ai.usage.output_tokens", spec_ct)
                         spec_span.set_attribute("agent.duration_ms", spec_dur)
@@ -390,6 +427,7 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                 brand_node = graph.get_node(brand_key)
                 execution_path = [triage_key, specialist_key]
                 brand_dur = 0
+                brand_failed = False
 
                 if brand_node is not None:
                     brand_model = "unknown"
@@ -417,14 +455,27 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                         bt.track_duration(brand_dur)
                         bt.track_tokens(TokenUsage(brand_pt, brand_ct, brand_pt + brand_ct))
                         bt.track_time_to_first_token(random.randint(30, max(50, brand_dur // 5)))
-                        bt.track_success()
-                        if random.random() < 0.78:
-                            bt.track_feedback({"kind": FeedbackKind.Positive})
+
+                        brand_tools = random.sample(AGENT_GRAPH_TOOLS["brand-voice"], k=random.randint(1, 2))
+                        bt.track_tool_calls(brand_tools)
+
+                        iteration_failed = triage_failed or spec_failed
+                        brand_failed = not iteration_failed and random.random() < AGENT_GRAPH_ERROR_RATE
+                        if iteration_failed or brand_failed:
+                            bt.track_error()
+                            graph_tracker.track_handoff_failure(specialist_key, brand_key)
                         else:
-                            bt.track_feedback({"kind": FeedbackKind.Negative})
+                            bt.track_success()
+                            graph_tracker.track_handoff_success(specialist_key, brand_key)
+
+                        if not (iteration_failed or brand_failed):
+                            if random.random() < 0.78:
+                                bt.track_feedback({"kind": FeedbackKind.Positive})
+                            else:
+                                bt.track_feedback({"kind": FeedbackKind.Negative})
+
                         total_in += brand_pt
                         total_out += brand_ct
-                        graph_tracker.track_handoff_success(specialist_key, brand_key)
                         execution_path.append(brand_key)
                         brand_span.set_attribute("gen_ai.usage.input_tokens", brand_pt)
                         brand_span.set_attribute("gen_ai.usage.output_tokens", brand_ct)
@@ -433,7 +484,11 @@ def run_agent_graph_batch(client, aiclient, num_iterations=200):
                 # Graph-level metrics
                 graph_duration = int((time.time() - graph_start) * 1000) + triage_dur + spec_dur + brand_dur
                 graph_tracker.track_total_tokens(TokenUsage(total_in, total_out, total_in + total_out))
-                graph_tracker.track_invocation_success()
+                any_node_failed = triage_failed or spec_failed or brand_failed
+                if any_node_failed:
+                    graph_tracker.track_invocation_failure()
+                else:
+                    graph_tracker.track_invocation_success()
                 graph_tracker.track_duration(graph_duration)
                 graph_tracker.track_path(execution_path)
 

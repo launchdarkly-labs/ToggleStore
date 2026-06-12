@@ -592,7 +592,7 @@ export default function Home() {
 
 		const pollHealth = async () => {
 			try {
-				const response = await fetch("/api/products/health")
+				const response = await fetch(`/api/products/health?t=${Date.now()}`, { cache: "no-store" })
 				const data = await response.json()
 
 				if (data.status === "error") {
@@ -652,19 +652,21 @@ export default function Home() {
 			}
 		}
 
-		// Initial poll
+		// Fire an initial burst of 3 errors with staggered timing for demo impact
 		pollHealthWithErrorHandling()
+		setTimeout(() => pollHealthWithErrorHandling(), 1000)
+		setTimeout(() => pollHealthWithErrorHandling(), 2000)
 
-		// Poll every 5-10 seconds (randomized for demo effect)
+		// Then continue polling every 2-3 seconds so 3 toasts overlap (5s dismiss / ~2s interval)
 		const scheduleNextPoll = () => {
-			const delay = Math.random() * 5000 + 5000 // 5-10 seconds
+			const delay = Math.random() * 1000 + 2000 // 2-3 seconds
 			timeoutId = setTimeout(() => {
 				pollHealthWithErrorHandling()
 				scheduleNextPoll()
 			}, delay)
 		}
 
-		scheduleNextPoll()
+		setTimeout(() => scheduleNextPoll(), 3500)
 
 		return () => {
 			if (timeoutId) clearTimeout(timeoutId)
