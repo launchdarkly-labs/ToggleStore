@@ -8,9 +8,11 @@ on:
         description: 'Namespace/Username for deployment'
         required: true
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: us-east-1
   KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
   KUBECTL_VERSION: "v1.23.0"
@@ -68,10 +70,9 @@ jobs:
           echo AWS_DEFAULT_REGION=us-east-1 >> ./.env.production
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::955116512041:role/github-actions-togglestore
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
@@ -131,13 +132,6 @@ jobs:
         uses: kodermax/kubectl-aws-eks@master
         with:
           args: apply -f ./.github/workflows/deploy_files/deploy.yaml -n ${{ env.DEMO_NAMESPACE }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
 
       - name: Get NGINX Ingress Controller Load Balancer Hostname
         id: get-nginx-lb
