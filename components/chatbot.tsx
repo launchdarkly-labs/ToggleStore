@@ -59,6 +59,24 @@ interface FlagWithMeta {
 // Tab types for the chatbot
 type ChatTab = "experiment" | "self-healing"
 
+interface PipelineModels {
+  category?: string
+  triageModel?: string
+  specialistModel?: string
+  brandVoiceModel?: string
+}
+
+const PIPELINE_CHATBOT_KEY = "ai-config--togglebotchatbot"
+const TRIAGE_AI_CONFIG_KEY = "ai-config--togglestore-triage"
+const BRAND_VOICE_AI_CONFIG_KEY = "ai-config--togglestore-brand-voice"
+
+const SPECIALIST_LABELS: Record<string, string> = {
+  products: "Product Specialist",
+  orders: "Order & Returns Specialist",
+  style: "Style Advisor",
+  general: "Product Specialist",
+}
+
 const INITIAL_MESSAGE: Message = {
   id: "welcome",
   role: "assistant",
@@ -79,6 +97,9 @@ export function ChatBot({
   const flags = useFlags()
   const flag = flags[aiConfigKey] as FlagWithMeta | undefined
   const selfHealingFlag = flags[selfHealingAiConfigKey] as FlagWithMeta | undefined
+  const triageFlag = flags[TRIAGE_AI_CONFIG_KEY] as FlagWithMeta | undefined
+  const brandVoiceFlag = flags[BRAND_VOICE_AI_CONFIG_KEY] as FlagWithMeta | undefined
+  const usesPipeline = aiConfigKey === PIPELINE_CHATBOT_KEY && triageFlag != null
   const { appMultiContext } = useLoginContext()
   const trackMetric = useTrackMetric()
   
@@ -108,6 +129,7 @@ export function ChatBot({
   const [metrics, setMetrics] = useState<{
     modelName?: string
     modelType?: string
+    pipeline?: PipelineModels
     timing?: {
       timeToFirstToken?: number
       totalTime?: number
@@ -536,6 +558,7 @@ export function ChatBot({
                     setMetrics({
                       modelName: data.modelName,
                       modelType: data.modelType,
+                      pipeline: data.pipeline,
                       timing: data.timing,
                       tokens: data.tokens,
                     })
@@ -1086,10 +1109,37 @@ export function ChatBot({
             </div>
             
             {/* Metrics Display - Experiment Tab */}
-            {activeTab === "experiment" && isEnabled && (flag?.model?.name || metrics) && (
+            {activeTab === "experiment" && isEnabled && (flag?.model?.name || metrics || usesPipeline) && (
               <div className="px-[32px] md:px-[40px] lg:px-[48px] pb-[12px] md:pb-[16px] lg:pb-[20px] border-t border-[#58595B]/30">
                 <div className="flex flex-col gap-2 md:gap-3 lg:gap-4 pt-[8px] md:pt-[10px] lg:pt-[12px]">
-                  {(metrics?.modelName || flag?.model?.name) && (
+                  {(usesPipeline || metrics?.pipeline) && (
+                    <div className="flex flex-col gap-1 md:gap-2">
+                      {[
+                        {
+                          step: "1. Triage",
+                          model: metrics?.pipeline?.triageModel || triageFlag?.model?.name,
+                        },
+                        {
+                          step: `2. ${(metrics?.pipeline?.category && SPECIALIST_LABELS[metrics.pipeline.category]) || "Specialist"}`,
+                          model: metrics?.pipeline?.specialistModel || "Picked by triage for each question",
+                        },
+                        {
+                          step: "3. Brand Voice",
+                          model: metrics?.pipeline?.brandVoiceModel || brandVoiceFlag?.model?.name,
+                        },
+                      ].map(({ step, model }) => (
+                        <div key={step} className="flex items-center gap-3 md:gap-4 lg:gap-5">
+                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
+                            {step}:
+                          </span>
+                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
+                            {model || "Unknown"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!usesPipeline && !metrics?.pipeline && (metrics?.modelName || flag?.model?.name) && (
                     <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
                       <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
                         Model:
