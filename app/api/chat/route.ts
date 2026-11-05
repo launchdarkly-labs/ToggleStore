@@ -338,6 +338,12 @@ export async function POST(request: NextRequest) {
                   triageModel: pipelineResult.triageResult.modelName,
                   specialistModel: pipelineResult.specialistResult.modelName,
                   brandVoiceModel: pipelineResult.brandVoiceResult.modelName,
+                  triageMs: pipelineResult.triageResult.durationMs,
+                  specialistMs: pipelineResult.specialistResult.durationMs,
+                  brandVoiceMs: pipelineResult.brandVoiceResult.durationMs,
+                  triageTokens: pipelineResult.triageResult.tokens.total,
+                  specialistTokens: pipelineResult.specialistResult.tokens.total,
+                  brandVoiceTokens: pipelineResult.brandVoiceResult.tokens.total,
                 },
                 done: true,
               })

@@ -64,6 +64,12 @@ interface PipelineModels {
   triageModel?: string
   specialistModel?: string
   brandVoiceModel?: string
+  triageMs?: number
+  specialistMs?: number
+  brandVoiceMs?: number
+  triageTokens?: number
+  specialistTokens?: number
+  brandVoiceTokens?: number
 }
 
 const PIPELINE_CHATBOT_KEY = "ai-config--togglebotchatbot"
@@ -1114,20 +1120,29 @@ export function ChatBot({
                 <div className="flex flex-col gap-2 md:gap-3 lg:gap-4 pt-[8px] md:pt-[10px] lg:pt-[12px]">
                   {(usesPipeline || metrics?.pipeline) && (
                     <div className="flex flex-col gap-1 md:gap-2">
+                      <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal uppercase tracking-wide">
+                        {metrics?.pipeline ? "Models used for the last answer" : "Pipeline models"}
+                      </span>
                       {[
                         {
                           step: "1. Triage",
                           model: metrics?.pipeline?.triageModel || triageFlag?.model?.name,
+                          ms: metrics?.pipeline?.triageMs,
+                          tokens: metrics?.pipeline?.triageTokens,
                         },
                         {
                           step: `2. ${(metrics?.pipeline?.category && SPECIALIST_LABELS[metrics.pipeline.category]) || "Specialist"}`,
                           model: metrics?.pipeline?.specialistModel || "Picked by triage for each question",
+                          ms: metrics?.pipeline?.specialistMs,
+                          tokens: metrics?.pipeline?.specialistTokens,
                         },
                         {
                           step: "3. Brand Voice",
                           model: metrics?.pipeline?.brandVoiceModel || brandVoiceFlag?.model?.name,
+                          ms: metrics?.pipeline?.brandVoiceMs,
+                          tokens: metrics?.pipeline?.brandVoiceTokens,
                         },
-                      ].map(({ step, model }) => (
+                      ].map(({ step, model, ms, tokens }) => (
                         <div key={step} className="flex items-center gap-3 md:gap-4 lg:gap-5">
                           <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
                             {step}:
@@ -1135,6 +1150,11 @@ export function ChatBot({
                           <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
                             {model || "Unknown"}
                           </span>
+                          {(ms !== undefined || tokens !== undefined) && (
+                            <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
+                              {[ms !== undefined && `${ms}ms`, tokens !== undefined && `${tokens} tokens`].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1151,6 +1171,11 @@ export function ChatBot({
                   )}
                   {metrics && (
                     <div className="flex items-center gap-6 md:gap-8 lg:gap-10">
+                      {metrics.pipeline && (
+                        <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
+                          Total (all 3 steps)
+                        </span>
+                      )}
                       {metrics.timing?.totalTime !== undefined && (
                         <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
                           <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
