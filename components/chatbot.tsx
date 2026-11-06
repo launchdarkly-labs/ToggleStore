@@ -15,7 +15,7 @@ import ReactMarkdown from "react-markdown"
 import { Product } from "@/types/product"
 import productsData from "@/data/products.json"
 import { MiniProductCard } from "@/components/mini-product-card"
-import { ThumbsUp, ThumbsDown } from "lucide-react"
+import { ThumbsUp, ThumbsDown, ChevronDown } from "lucide-react"
 
 interface Message {
   id: string
@@ -106,6 +106,7 @@ export function ChatBot({
   const triageFlag = flags[TRIAGE_AI_CONFIG_KEY] as FlagWithMeta | undefined
   const brandVoiceFlag = flags[BRAND_VOICE_AI_CONFIG_KEY] as FlagWithMeta | undefined
   const usesPipeline = aiConfigKey === PIPELINE_CHATBOT_KEY && triageFlag != null
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
   const { appMultiContext } = useLoginContext()
   const trackMetric = useTrackMetric()
   
@@ -991,7 +992,7 @@ export function ChatBot({
       {/* Chat Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="w-[calc(100vw-2rem)]! h-auto! min-h-[400px]! max-h-[calc(100vh-4rem)]! sm:w-[min(433px,calc(100vw-2rem))]! sm:min-h-[582px]! sm:max-h-[min(582px,calc(100vh-4rem))]! md:w-[min(900px,calc(100vw-2rem))]! md:max-h-[calc(100vh-4rem)]! lg:w-[min(1200px,calc(100vw-2rem))]! lg:max-h-[calc(100vh-4rem)]! max-w-[calc(100vw-2rem)]! rounded-[30px] border border-[#58595B] p-0 overflow-hidden flex flex-col"
+          className="w-[calc(100vw-2rem)]! h-auto! min-h-[400px]! max-h-[calc(100vh-4rem)]! sm:w-[min(560px,calc(100vw-2rem))]! sm:min-h-[582px]! sm:max-h-[min(720px,calc(100vh-4rem))]! md:w-[min(900px,calc(100vw-2rem))]! md:max-h-[calc(100vh-4rem)]! lg:w-[min(1200px,calc(100vw-2rem))]! lg:max-h-[calc(100vh-4rem)]! max-w-[calc(100vw-2rem)]! rounded-[30px] border border-[#58595B] p-0 overflow-hidden flex flex-col"
           style={{
             backgroundImage:
               "linear-gradient(179.99999980063217deg, rgba(0, 0, 0, 0) 23.03%, rgba(0, 0, 0, 1) 129.6%), linear-gradient(90deg, rgba(25, 25, 25, 1) 0%, rgba(25, 25, 25, 1) 100%)",
@@ -1115,93 +1116,74 @@ export function ChatBot({
             </div>
             
             {/* Metrics Display - Experiment Tab */}
-            {activeTab === "experiment" && isEnabled && (flag?.model?.name || metrics || usesPipeline) && (
-              <div className="px-[32px] md:px-[40px] lg:px-[48px] pb-[12px] md:pb-[16px] lg:pb-[20px] border-t border-[#58595B]/30">
-                <div className="flex flex-col gap-2 md:gap-3 lg:gap-4 pt-[8px] md:pt-[10px] lg:pt-[12px]">
-                  {(usesPipeline || metrics?.pipeline) && (
-                    <div className="flex flex-col gap-1 md:gap-2">
-                      <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal uppercase tracking-wide">
-                        {metrics?.pipeline ? "Models used for the last answer" : "Pipeline models"}
-                      </span>
-                      {[
-                        {
-                          step: "1. Triage",
-                          model: metrics?.pipeline?.triageModel || triageFlag?.model?.name,
-                          ms: metrics?.pipeline?.triageMs,
-                          tokens: metrics?.pipeline?.triageTokens,
-                        },
-                        {
-                          step: `2. ${(metrics?.pipeline?.category && SPECIALIST_LABELS[metrics.pipeline.category]) || "Specialist"}`,
-                          model: metrics?.pipeline?.specialistModel || "Picked by triage for each question",
-                          ms: metrics?.pipeline?.specialistMs,
-                          tokens: metrics?.pipeline?.specialistTokens,
-                        },
-                        {
-                          step: "3. Brand Voice",
-                          model: metrics?.pipeline?.brandVoiceModel || brandVoiceFlag?.model?.name,
-                          ms: metrics?.pipeline?.brandVoiceMs,
-                          tokens: metrics?.pipeline?.brandVoiceTokens,
-                        },
-                      ].map(({ step, model, ms, tokens }) => (
-                        <div key={step} className="flex items-center gap-3 md:gap-4 lg:gap-5">
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                            {step}:
-                          </span>
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                            {model || "Unknown"}
-                          </span>
-                          {(ms !== undefined || tokens !== undefined) && (
-                            <span className="text-[14px] md:text-[16px] lg:text-[18px] text-[#A7A9AC] font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                              {[ms !== undefined && `${ms}ms`, tokens !== undefined && `${tokens} tokens`].filter(Boolean).join(" · ")}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+            {activeTab === "experiment" && isEnabled && (flag?.model?.name || metrics || usesPipeline) && (() => {
+              const label = "text-[#A7A9AC] font-['Sohne:Buch',sans-serif]"
+              const value = "text-white font-['Sohne_Mono:Kräftig',sans-serif]"
+              const steps = [
+                { step: "Triage", model: metrics?.pipeline?.triageModel || triageFlag?.model?.name, ms: metrics?.pipeline?.triageMs, tokens: metrics?.pipeline?.triageTokens },
+                { step: (metrics?.pipeline?.category && SPECIALIST_LABELS[metrics.pipeline.category]) || "Specialist", model: metrics?.pipeline?.specialistModel || "Picked by triage for each question", ms: metrics?.pipeline?.specialistMs, tokens: metrics?.pipeline?.specialistTokens },
+                { step: "Brand Voice", model: metrics?.pipeline?.brandVoiceModel || brandVoiceFlag?.model?.name, ms: metrics?.pipeline?.brandVoiceMs, tokens: metrics?.pipeline?.brandVoiceTokens },
+              ]
+              const stats = (ms?: number, tokens?: number) =>
+                [ms !== undefined && `${ms}ms`, tokens !== undefined && `${tokens} tokens`].filter(Boolean).join(" · ")
+              const total = metrics?.pipeline ? stats(metrics.timing?.totalTime, metrics.tokens?.total) : ""
+              const rows = (
+                <div className="flex flex-col gap-0.5">
+                  {steps.map(({ step, model, ms, tokens }, i) => (
+                    <div key={step} className="flex items-baseline gap-2 min-w-0 text-[15px] md:text-[17px] lg:text-[18px] leading-snug">
+                      <span className={`${label} shrink-0`}>{i + 1}. {step}</span>
+                      <span className={`${value} truncate min-w-0`} title={model || "Unknown"}>{model || "Unknown"}</span>
+                      {(ms !== undefined || tokens !== undefined) && (
+                        <span className={`${label} shrink-0 ml-auto`}>{stats(ms, tokens)}</span>
+                      )}
+                    </div>
+                  ))}
+                  {total && (
+                    <div className="flex items-baseline gap-2 text-[15px] md:text-[17px] lg:text-[18px] leading-snug border-t border-[#58595B]/30 mt-0.5 pt-0.5">
+                      <span className={label}>Total (all 3 steps)</span>
+                      <span className={`${value} ml-auto`}>{total}</span>
                     </div>
                   )}
-                  {!usesPipeline && !metrics?.pipeline && (metrics?.modelName || flag?.model?.name) && (
-                    <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
-                      <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                        Model:
-                      </span>
-                      <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                        {metrics?.modelName || flag?.model?.name}
-                      </span>
-                    </div>
-                  )}
-                  {metrics && (
-                    <div className="flex items-center gap-6 md:gap-8 lg:gap-10">
-                      {metrics.pipeline && (
-                        <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                          Total (all 3 steps)
-                        </span>
+                </div>
+              )
+              const heading = metrics?.pipeline ? "Models used for the last answer" : "Pipeline models"
+              return (
+              <div className="px-[32px] md:px-[40px] lg:px-[48px] pb-[8px] md:pb-[10px] border-t border-[#58595B]/30">
+                <div className="flex flex-col gap-1 pt-[6px] md:pt-[8px]">
+                  {usesPipeline || metrics?.pipeline ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setHeaderCollapsed((c) => !c)}
+                        aria-expanded={!headerCollapsed}
+                        className={`${label} flex items-center gap-2 min-w-0 text-left text-[13px] md:text-[14px] lg:text-[15px] uppercase tracking-wide hover:text-white transition-colors`}
+                      >
+                        <span className="shrink-0">{heading}</span>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-300 ${headerCollapsed ? "-rotate-90" : ""}`} />
+                        {headerCollapsed && total && <span className="ml-auto shrink-0 normal-case tracking-normal">{total}</span>}
+                      </button>
+                      <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${headerCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"}`}>
+                        <div className="overflow-hidden">{rows}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-baseline gap-2 flex-wrap text-[15px] md:text-[17px] lg:text-[18px] leading-snug">
+                      {(metrics?.modelName || flag?.model?.name) && (
+                        <>
+                          <span className={label}>Model</span>
+                          <span className={value}>{metrics?.modelName || flag?.model?.name}</span>
+                        </>
                       )}
-                      {metrics.timing?.totalTime !== undefined && (
-                        <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                            Time:
-                          </span>
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                            {metrics.timing.totalTime}ms
-                          </span>
-                        </div>
-                      )}
-                      {metrics.tokens?.total !== undefined && (
-                        <div className="flex items-center gap-3 md:gap-4 lg:gap-5">
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-[#A7A9AC] font-['Sohne:Buch',sans-serif] leading-normal">
-                            Tokens:
-                          </span>
-                          <span className="text-[16px] md:text-[18px] lg:text-[20px] text-white font-['Sohne_Mono:Kräftig',sans-serif] leading-normal">
-                            {metrics.tokens.total} ({metrics.tokens.input || 0} in / {metrics.tokens.output || 0} out)
-                          </span>
-                        </div>
+                      {metrics && (
+                        <span className={`${label} ml-auto`}>{stats(metrics.timing?.totalTime, metrics.tokens?.total)}</span>
                       )}
                     </div>
                   )}
                 </div>
               </div>
-            )}
-            
+              )
+            })()}
+
             {/* Metrics Display - Self-Healing Tab */}
             {activeTab === "self-healing" && isSelfHealingEnabled && (
               <div className="px-[32px] md:px-[40px] lg:px-[48px] pb-[12px] md:pb-[16px] lg:pb-[20px] border-t border-[#58595B]/30">
