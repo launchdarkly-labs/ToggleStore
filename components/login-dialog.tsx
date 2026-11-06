@@ -149,22 +149,22 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         </VisuallyHidden>
 
         {/* Header with Icon, Title and Close Button */}
-        <div className="flex items-center gap-6 px-4 sm:px-6 md:px-8 pt-6 sm:pt-10 pb-5 shrink-0">
+        <div className="flex items-center gap-3 sm:gap-6 px-4 sm:px-6 md:px-8 pt-6 sm:pt-10 pb-5 shrink-0">
             <Image
               src="/storefront/Icon-Person.svg"
               alt=""
               width={36}
               height={36}
-              className="w-12 h-12"
+              className="w-9 h-9 sm:w-12 sm:h-12 shrink-0"
             />
-          <h2 className="text-white text-[28px] sm:text-[32px] font-bold leading-[1.3] flex-1">
+          <h2 className="text-white text-[22px] sm:text-[32px] font-bold leading-[1.3] flex-1 min-w-0">
             Select Persona
           </h2>
           <button
             onClick={() => onOpenChange(false)}
-            className="w-[54px] h-[54px] rounded-full border-[1.125px] border-[#7084FF] flex items-center justify-center hover:bg-[#7084FF]/10 transition-colors shrink-0"
+            className="w-10 h-10 sm:w-[54px] sm:h-[54px] rounded-full border-[1.125px] border-[#7084FF] flex items-center justify-center hover:bg-[#7084FF]/10 transition-colors shrink-0"
           >
-            <Image src="/assets/icons/close.svg" alt="Close" width={31.5} height={31.5} className="w-[31.5px] h-[31.5px]" />
+            <Image src="/assets/icons/close.svg" alt="Close" width={31.5} height={31.5} className="w-6 h-6 sm:w-[31.5px] sm:h-[31.5px]" />
           </button>
         </div>
 

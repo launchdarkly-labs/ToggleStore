@@ -260,7 +260,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
       >
       <nav className="flex items-center justify-between">
         {/* Left section: QR Code (md+) + Menu + Logo */}
-        <div className="flex items-center gap-4 md:gap-7">
+        <div className="flex items-center gap-4 md:gap-7 shrink-0">
           {/* QR Code Button - Only visible on medium and large screens */}
           {(
             <button 
@@ -294,7 +294,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
         </div>
 
         {/* Center: Search bar (desktop only) */}
-        <div className="hidden xl:block relative w-[534px] xl:w-[600px]" ref={desktopSearchRef} data-dev-highlight="search">
+        <div className="hidden xl:block relative w-[600px] min-w-0 mx-6" ref={desktopSearchRef} data-dev-highlight="search">
           {!desktopSearchQuery && !desktopSearchFocused && (
             <div className="absolute left-[26px] top-1/2 -translate-y-1/2 flex items-center gap-5 pointer-events-none z-10 transition-opacity">
               <Image
@@ -600,7 +600,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
         </div>
 
         {/* Right section: Search + Rewards + User + Cart */}
-        <div className="flex items-center gap-3 md:gap-[34px]">
+        <div className="flex items-center gap-3 md:gap-[34px] shrink-0">
           {/* Search Icon - Opens the search overlay until the full search bar fits (xl) */}
           <button
             onClick={() => setMobileSearchOpen(true)}
@@ -613,7 +613,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                 alt="Search"
                 width={24}
                 height={24}
-                className="w-4 h-4 md:w-6 md:h-6"
+                className="w-5 h-5 md:w-[30px] md:h-[30px] translate-x-[10%] -translate-y-[2%]"
               />
             </div>
           </button>
