@@ -65,8 +65,8 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
   // Initialize context on mount - either from cookie or create anonymous
   useEffect(() => {
     const initializeContext = async () => {
-      if (isInitialized && client) {
-        const cookieContext = getCookie(LD_CONTEXT_COOKIE_KEY)
+      const cookieContext = getCookie(LD_CONTEXT_COOKIE_KEY)
+      if (cookieContext) {
         try {
           const parsed = JSON.parse(cookieContext as string)
           setAppMultiContext(parsed)
@@ -110,11 +110,6 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const loginUser = async (email: string): Promise<void> => {
-    if (!client || !isInitialized) {
-      console.error("LaunchDarkly client not available or not initialized")
-      return
-    }
-   
     // Update all personas array with changes if user was previously logged in
     if (Object.keys(userObject).length > 0 && userObject.personaemail) {
       setAllUsers((prevObj) => [
@@ -176,7 +171,11 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
     }
     
     setAppMultiContext(context)
-    await client.identify(context)
+    if (client && isInitialized) {
+      await client.identify(context)
+    } else {
+      console.warn("LaunchDarkly client not available; logged in locally without identify")
+    }
     console.log("loginUser", context)
 
     setCookie(LD_CONTEXT_COOKIE_KEY, JSON.stringify(context), {
@@ -229,11 +228,6 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const logoutUser = async (): Promise<void> => {
-    if (!client || !isInitialized) {
-      console.error("LaunchDarkly client not available or not initialized")
-      return
-    }
-
     // Reset user state first
     setIsLoggedIn(false)
     setUserObject(startingUserObject)
@@ -284,7 +278,9 @@ export const LoginProvider = ({ children }: { children: ReactNode }) => {
     })
 
     // Identify with LaunchDarkly to reset context
-    await client.identify(context)
+    if (client && isInitialized) {
+      await client.identify(context)
+    }
     console.log("[LoginContext] ✅ Logged out - Anonymous context set:", context)
   }
 
