@@ -58,6 +58,19 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
   const rewardsProgramEnabled = useFlag("rewardsProgram", false)
   const apiReleaseEnabled = flags["apiRelease"] === true
 
+  // Search and Account fold into the overflow menu only where they would hit the nav logo.
+  // The home page has no nav logo. With Rewards on, the overflow menu also takes space just above md.
+  const navIconClass = isHomePage
+    ? "flex"
+    : rewardsProgramEnabled
+      ? "hidden sm:flex md:hidden min-[51.25rem]:flex"
+      : "hidden sm:flex"
+  const foldedMenuItemClass = isHomePage
+    ? "hidden"
+    : rewardsProgramEnabled
+      ? "flex sm:hidden md:flex min-[51.25rem]:hidden"
+      : "flex sm:hidden"
+
   // Refs for click outside detection
   const desktopSearchRef = useRef<HTMLDivElement>(null)
   const desktopSearchInputRef = useRef<HTMLInputElement>(null)
@@ -586,8 +599,25 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
           )}
         </div>
 
-        {/* Right section: Rewards + User + Cart */}
+        {/* Right section: Search + Rewards + User + Cart */}
         <div className="flex items-center gap-3 md:gap-[34px]">
+          {/* Search Icon - Opens the search overlay until the full search bar fits (xl) */}
+          <button
+            onClick={() => setMobileSearchOpen(true)}
+            className={`${navIconClass} xl:hidden relative items-center justify-center hover:opacity-80 transition-opacity`}
+            aria-label="Search"
+          >
+            <div className="w-9 h-9 md:w-[54px] md:h-[54px] rounded-full border-[1.125px] border-[#7084FF] flex items-center justify-center bg-[#7084FF]/10">
+              <Image
+                src="/storefront/search.svg"
+                alt="Search"
+                width={24}
+                height={24}
+                className="w-4 h-4 md:w-6 md:h-6"
+              />
+            </div>
+          </button>
+
           {/* Desktop: Rewards, User icons (visible on xl+) */}
           {/* Rewards Icon - Desktop only, only show if feature flag is enabled */}
           {rewardsProgramEnabled && (
@@ -602,10 +632,10 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
             </button>
           )}
 
-          {/* User/Persona Icon - Desktop only */}
+          {/* User/Persona Icon */}
           <button
             onClick={() => setLoginDialogOpen(true)}
-            className="hidden xl:flex relative items-center justify-center hover:opacity-80 transition-opacity"
+            className={`${navIconClass} relative items-center justify-center hover:opacity-80 transition-opacity`}
             data-dev-highlight="persona"
           >
             {isLoggedIn && userObject.personaimage ? (
@@ -648,8 +678,11 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
             )}
           </button>
 
-          {/* Mobile Menu Button - Only visible on mobile/tablet */}
-          <div className="xl:hidden relative" ref={mobileMenuRef}>
+          {/* Overflow Menu Button - Only visible while some icons are folded into it */}
+          <div
+            className={`${rewardsProgramEnabled ? "" : isHomePage ? "hidden" : "sm:hidden"} xl:hidden relative`}
+            ref={mobileMenuRef}
+          >
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="flex items-center justify-center hover:opacity-80 transition-opacity"
@@ -670,7 +703,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                       setMobileSearchOpen(true)
                       setMobileMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#7084FF]/10 transition-colors text-left"
+                    className={`w-full ${foldedMenuItemClass} items-center gap-3 px-4 py-3 hover:bg-[#7084FF]/10 transition-colors text-left`}
                   >
                     <Image
                       src="/storefront/search.svg"
@@ -702,7 +735,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
                       setLoginDialogOpen(true)
                       setMobileMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#7084FF]/10 transition-colors text-left"
+                    className={`w-full ${foldedMenuItemClass} items-center gap-3 px-4 py-3 hover:bg-[#7084FF]/10 transition-colors text-left`}
                   >
                     {isLoggedIn && userObject.personaimage ? (
                       <div className="w-5 h-5 rounded-full overflow-hidden border border-[#7084FF]">
