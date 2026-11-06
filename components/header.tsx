@@ -58,8 +58,8 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
   const rewardsProgramEnabled = useFlag("rewardsProgram", false)
   const apiReleaseEnabled = flags["apiRelease"] === true
 
-  // Search and Account fold into the overflow menu only where they would hit the nav logo.
-  // The home page has no nav logo. With Rewards on, the overflow menu also takes space just above md.
+  // Search, Rewards and Account fold into the overflow menu only where they would hit the nav logo.
+  // The home page has no nav logo. With Rewards on, the extra icon does not fit between md and 51.25rem.
   const navIconClass = isHomePage
     ? "flex"
     : rewardsProgramEnabled
@@ -618,12 +618,11 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
             </div>
           </button>
 
-          {/* Desktop: Rewards, User icons (visible on xl+) */}
-          {/* Rewards Icon - Desktop only, only show if feature flag is enabled */}
+          {/* Rewards Icon - only if the feature flag is enabled */}
           {rewardsProgramEnabled && (
             <button
               onClick={() => setRewardsDialogOpen(true)}
-              className="hidden xl:flex relative items-center justify-center hover:opacity-80 transition-opacity"
+              className={`${navIconClass} relative items-center justify-center hover:opacity-80 transition-opacity`}
               aria-label="Rewards Program"
             >
               <div className="w-9 h-9 md:w-[54px] md:h-[54px] rounded-full border-[1.125px] border-[#7084FF] flex items-center justify-center bg-[#7084FF]/10">
@@ -680,7 +679,7 @@ export function Header({ onCartOpen, cartItemCount = 0, onAddToCart, onViewProdu
 
           {/* Overflow Menu Button - Only visible while some icons are folded into it */}
           <div
-            className={`${rewardsProgramEnabled ? "" : isHomePage ? "hidden" : "sm:hidden"} xl:hidden relative`}
+            className={`${foldedMenuItemClass} relative`}
             ref={mobileMenuRef}
           >
             <button
